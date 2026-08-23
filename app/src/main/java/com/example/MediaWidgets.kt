@@ -9,10 +9,21 @@ import android.widget.VideoView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,12 +34,98 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import java.io.File
+
+data class FileCategoryInfo(
+    val icon: ImageVector,
+    val iconColor: Color,
+    val backgroundColor: Color,
+    val label: String
+)
+
+fun getFileCategoryInfo(filename: String): FileCategoryInfo {
+    val ext = filename.substringAfterLast(".", "").lowercase()
+    return when (ext) {
+        "jpg", "jpeg", "png", "webp", "gif", "bmp", "svg", "heic" -> FileCategoryInfo(
+            icon = Icons.Default.Image,
+            iconColor = Color(0xFF38BDF8),
+            backgroundColor = Color(0x2438BDF8),
+            label = "تصویر"
+        )
+        "mp4", "mkv", "webm", "3gp", "avi", "mov", "flv", "ts", "m4v" -> FileCategoryInfo(
+            icon = Icons.Default.Movie,
+            iconColor = Color(0xFFA855F7),
+            backgroundColor = Color(0x24A855F7),
+            label = "ویدیو"
+        )
+        "mp3", "wav", "m4a", "ogg", "aac", "flac", "opus", "wma" -> FileCategoryInfo(
+            icon = Icons.Default.Audiotrack,
+            iconColor = Color(0xFFEC4899),
+            backgroundColor = Color(0x24EC4899),
+            label = "صدا"
+        )
+        "pdf", "doc", "docx", "txt", "rtf", "odt", "xls", "xlsx", "ppt", "pptx", "csv" -> FileCategoryInfo(
+            icon = Icons.Default.Description,
+            iconColor = Color(0xFFF97316),
+            backgroundColor = Color(0x24F97316),
+            label = "سند"
+        )
+        "zip", "rar", "7z", "tar", "gz", "bz2", "xz" -> FileCategoryInfo(
+            icon = Icons.Default.FolderZip,
+            iconColor = Color(0xFFFBBF24),
+            backgroundColor = Color(0x24FBBF24),
+            label = "فشرده"
+        )
+        "apk", "xapk", "apks" -> FileCategoryInfo(
+            icon = Icons.Default.Android,
+            iconColor = Color(0xFF22C55E),
+            backgroundColor = Color(0x2422C55E),
+            label = "برنامه"
+        )
+        "kt", "java", "py", "js", "ts", "html", "css", "json", "xml", "c", "cpp", "h", "cs", "sql", "sh" -> FileCategoryInfo(
+            icon = Icons.Default.Code,
+            iconColor = Color(0xFF6366F1),
+            backgroundColor = Color(0x246366F1),
+            label = "کد"
+        )
+        else -> FileCategoryInfo(
+            icon = Icons.Default.InsertDriveFile,
+            iconColor = Color(0xFF94A3B8),
+            backgroundColor = Color(0x2494A3B8),
+            label = "فایل"
+        )
+    }
+}
+
+@Composable
+fun FileVectorIconBadge(
+    filename: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 44.dp
+) {
+    val info = remember(filename) { getFileCategoryInfo(filename) }
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(12.dp))
+            .background(info.backgroundColor)
+            .border(BorderStroke(1.dp, info.iconColor.copy(alpha = 0.35f)), RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = info.icon,
+            contentDescription = info.label,
+            tint = info.iconColor,
+            modifier = Modifier.size(size * 0.52f)
+        )
+    }
+}
 
 fun getFileType(filename: String): String {
     val ext = filename.substringAfterLast(".").lowercase()

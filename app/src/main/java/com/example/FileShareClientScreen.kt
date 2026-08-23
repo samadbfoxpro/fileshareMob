@@ -2354,111 +2354,124 @@ fun ClientFileRowItem(
         val mb = kb / 1024.0
         if (mb >= 1.0) String.format("%.1f MB", mb) else String.format("%.1f KB", kb)
     }
+    val categoryInfo = remember(fileItem.name) { getFileCategoryInfo(fileItem.name) }
 
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF1E1E24))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(vertical = 3.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF192229)),
+        border = BorderStroke(1.dp, Color(0xFF283742))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            // File Vector Icon Badge
+            FileVectorIconBadge(
+                filename = fileItem.name,
+                size = 42.dp
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            // File Info
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(
-                    text = if (fileItem.source == "upload") "📥" else "📂",
-                    fontSize = 18.sp,
-                    modifier = Modifier.padding(end = 8.dp)
+                    text = fileItem.name,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Column(modifier = Modifier.weight(1f)) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = fileItem.name,
-                        fontSize = 12.sp,
+                        text = if (fileItem.source == "upload") "مخزن آپلود" else "پوشه اشتراکی",
+                        fontSize = 8.sp,
+                        color = if (fileItem.source == "upload") Color(0xFF4ADE80) else Color(0xFFC084FC),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier
+                            .background(
+                                color = if (fileItem.source == "upload") Color(0x2822C55E) else Color(0x28A855F7),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = if (fileItem.source == "upload") "مخزن آپلود" else "پوشه اشتراکی",
-                            fontSize = 8.sp,
-                            color = if (fileItem.source == "upload") Color(0xFFB2F2BB) else Color(0xFFD0BCFF),
-                            modifier = Modifier
-                                .background(
-                                    color = if (fileItem.source == "upload") Color(0xFF2E3B2E) else Color(0xFF381E72),
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        )
-                        Text(
-                            text = sizeStr,
-                            fontSize = 9.sp,
-                            color = Color(0xFF938F99)
-                        )
-                    }
+
+                    Text(
+                        text = categoryInfo.label,
+                        fontSize = 8.sp,
+                        color = categoryInfo.iconColor,
+                        modifier = Modifier
+                            .background(
+                                color = categoryInfo.backgroundColor,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+
+                    Text(
+                        text = sizeStr,
+                        fontSize = 9.sp,
+                        color = Color(0xFF94A3B8)
+                    )
                 }
             }
-        }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Action Download Button
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Action Buttons
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(Color(0xFF381E72))
-                    .clickable { onDownload() }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "دانلود و ذخیره",
-                    tint = Color(0xFFD0BCFF),
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "دانلود کردن",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFD0BCFF)
-                )
-            }
-
-            // Optional Delete Button
-            if (onDelete != null) {
-                Row(
+                // Download Button
+                Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0x22F87171))
-                        .clickable { onDelete() }
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF005C4B))
+                        .border(BorderStroke(1.dp, Color(0xFF00A884).copy(alpha = 0.5f)), RoundedCornerShape(8.dp))
+                        .clickable { onDownload() },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "حذف فایل",
-                        tint = Color(0xFFF87171),
-                        modifier = Modifier.size(12.dp)
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "دانلود و ذخیره",
+                        tint = Color(0xFF25D366),
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "حذف",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF87171)
-                    )
+                }
+
+                // Delete Button
+                if (onDelete != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x22EF4444))
+                            .border(BorderStroke(1.dp, Color(0x55EF4444)), RoundedCornerShape(8.dp))
+                            .clickable { onDelete() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "حذف فایل",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

@@ -328,15 +328,32 @@ class FileShareServer(
                     response
                 }
 
-                // 10. GET /api/messages -> Get messages
+                // 10. GET /api/messages -> Get messages (supports ?username=... or ?chatId=...)
                 uri == "/api/messages" && method == Method.GET -> {
-                    repository.markHostMessagesAsRead()
+                    val webSessionId = session.headers["x-web-session-id"] ?: getParam(session, "sessionId") ?: ""
+                    val sessionNickname = if (webSessionId.isNotEmpty()) {
+                        WebSessionApprovalManager.getSession(webSessionId)?.nickname
+                    } else null
+
+                    val usernameParam = getParam(session, "username") ?: getParam(session, "chatId")
+                    val username = if (!usernameParam.isNullOrBlank()) usernameParam.trim() else sessionNickname?.trim()
                     val afterStr = getParam(session, "after")
-                    val list = if (afterStr != null) {
-                        val afterId = afterStr.toLongOrNull() ?: 0L
-                        repository.getMessagesAfter(afterId)
+                    val afterId = afterStr?.toLongOrNull() ?: 0L
+                    
+                    val list = if (!username.isNullOrBlank()) {
+                        repository.markHostMessagesAsRead(username)
+                        if (afterId > 0L) {
+                            repository.getMessagesForChat(username).filter { it.id > afterId }
+                        } else {
+                            repository.getMessagesForChat(username)
+                        }
                     } else {
-                        repository.getAllMessages()
+                        repository.markHostMessagesAsRead()
+                        if (afterId > 0L) {
+                            repository.getMessagesAfter(afterId)
+                        } else {
+                            repository.getAllMessages()
+                        }
                     }
 
                     val array = org.json.JSONArray()
@@ -351,10 +368,21 @@ class FileShareServer(
                     val body = getBodyData(session)
                     if (body != null) {
                         val obj = JSONObject(body)
-                        val from = obj.getString("from")
+                        val webSessionId = session.headers["x-web-session-id"] ?: getParam(session, "sessionId") ?: ""
+                        val sessionNickname = if (webSessionId.isNotEmpty()) {
+                            WebSessionApprovalManager.getSession(webSessionId)?.nickname
+                        } else null
+
+                        var from = obj.optString("from", "").trim()
+                        if (from.isEmpty()) {
+                            from = sessionNickname?.trim() ?: "کاربر وب"
+                        }
                         val text = obj.getString("text")
                         val senderId = obj.optString("senderId", "")
-                        val chatId = obj.optString("chatId", "")
+                        var chatId = obj.optString("chatId", "").trim()
+                        if (chatId.isEmpty() && from.isNotBlank() && !from.contains("مدیر") && !from.contains("گوشی")) {
+                            chatId = from
+                        }
                         val isEncrypted = obj.optBoolean("isEncrypted", false)
                         val alreadyEncrypted = obj.optBoolean("alreadyEncrypted", false)
                         
@@ -376,6 +404,20 @@ class FileShareServer(
                         newFixedLengthResponse(Response.Status.CREATED, "application/json; charset=utf-8", created.toJsonObject().toString())
                     } else {
                         newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain; charset=utf-8", "ورودی نامعتبر")
+                    }
+                }
+
+                // 11c. DELETE /api/messages/room -> Delete specific user's chat room
+                uri == "/api/messages/room" && method == Method.DELETE -> {
+                    val username = getParam(session, "username") ?: getParam(session, "chatId")
+                    if (username != null && username.isNotBlank()) {
+                        val deleted = repository.deleteChatRoom(username)
+                        val obj = JSONObject()
+                        obj.put("status", "success")
+                        obj.put("deleted", deleted)
+                        newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8", obj.toString())
+                    } else {
+                        newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain; charset=utf-8", "نام کاربری نامعتبر است")
                     }
                 }
 

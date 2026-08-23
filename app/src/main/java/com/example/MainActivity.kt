@@ -17,6 +17,10 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -32,6 +36,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,17 +64,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -136,7 +150,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        repository = FileShareRepository(applicationContext)
+        repository = FileShareRepository.getInstance(applicationContext)
 
         handleIntent(intent)
 
@@ -1104,12 +1118,22 @@ fun FileShareMessages(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    var messagesList by remember { mutableStateOf(emptyList<Message>()) }
+    
+    var chatRooms by remember { mutableStateOf(emptyList<ChatRoomSummary>()) }
+    var selectedUserRoom by remember { mutableStateOf<String?>("all") }
+    var roomMessages by remember { mutableStateOf(emptyList<Message>()) }
+    
     var inputText by remember { mutableStateOf("") }
     var refreshTrigger by remember { mutableStateOf(0) }
-    var confirmClearDialog by remember { mutableStateOf(false) }
     var replyToMessage by remember { mutableStateOf<Message?>(null) }
     var editingMessage by remember { mutableStateOf<Message?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Dialogs
+    var showNewChatDialog by remember { mutableStateOf(false) }
+    var newChatUsernameInput by remember { mutableStateOf("") }
+    var roomToDelete by remember { mutableStateOf<String?>(null) }
+    var confirmClearAllDialog by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
 
@@ -1118,26 +1142,7 @@ fun FileShareMessages(
     var chatUploadFileName by remember { mutableStateOf("") }
     var chatUploadCanceled by remember { mutableStateOf(false) }
 
-    // Chat Thread Navigation
-    var selectedPeerId by remember { mutableStateOf<String?>(null) }
-    var searchQuery by remember { mutableStateOf("") }
-
-    // Real-time online ping status map
-    var onlineStatuses by remember { mutableStateOf(mapOf<String, Boolean>()) }
-    val trustedPeers = remember(refreshTrigger) { repository.getTrustedPeers() }
-
-    LaunchedEffect(trustedPeers) {
-        while (true) {
-            val updated = mutableMapOf<String, Boolean>()
-            for (peer in trustedPeers) {
-                val pingOk = ClientNetworkManager.pingHost(peer.ip)
-                updated[peer.ip] = pingOk
-            }
-            onlineStatuses = updated
-            delay(4000)
-        }
-    }
-
+    // Attachment file picker launcher
     val chatFilePickerLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
     ) { uri ->
@@ -1179,17 +1184,18 @@ fun FileShareMessages(
                     }
                     
                     if (success) {
-                        Toast.makeText(context, "فایل با موفقیت در چت قرار گرفت.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "فایل با موفقیت در گفتگو قرار گرفت.", Toast.LENGTH_SHORT).show()
                         val sizeStr = run {
                             val mb = savedFile.length().toDouble() / (1024.0 * 1024.0)
                             val kb = savedFile.length().toDouble() / 1024.0
                             if (mb >= 1.0) String.format("%.1f MB", mb) else String.format("%.1f KB", kb)
                         }
+                        val targetChat = if (selectedUserRoom != null && selectedUserRoom != "all") selectedUserRoom else null
                         repository.addMessage(
                             from = "مدیر شبکه (گوشی)",
                             text = "📎 فایل: ${savedFile.name} ($sizeStr)",
                             senderId = "host_admin",
-                            chatId = selectedPeerId
+                            chatId = targetChat
                         )
                         refreshTrigger++
                     } else {
@@ -1210,98 +1216,256 @@ fun FileShareMessages(
         }
     }
 
-    // Load messages when trigger changes (providing organic syncing)
-    LaunchedEffect(refreshTrigger) {
-        repository.markAllMessagesAsRead()
-        messagesList = repository.getAllMessages()
-    }
-
-    // Auto-refresh messages loop
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(3000)
+    // Sync effect for rooms & messages
+    LaunchedEffect(refreshTrigger, selectedUserRoom) {
+        chatRooms = repository.getChatRooms()
+        val currentRoom = selectedUserRoom
+        if (currentRoom == null || currentRoom == "all") {
             repository.markAllMessagesAsRead()
-            messagesList = repository.getAllMessages()
+            roomMessages = repository.getAllMessages()
+        } else {
+            repository.markChatAsRead(currentRoom)
+            roomMessages = repository.getMessagesForChat(currentRoom)
         }
     }
 
-    // Auto scroll to the newest message at bottom inside active thread
-    LaunchedEffect(messagesList.size, selectedPeerId) {
-        if (messagesList.isNotEmpty()) {
-            listState.animateScrollToItem(messagesList.size - 1)
+    // Auto-refresh timer loop
+    LaunchedEffect(selectedUserRoom) {
+        while (true) {
+            delay(2000)
+            chatRooms = repository.getChatRooms()
+            val currentRoom = selectedUserRoom
+            if (currentRoom == null || currentRoom == "all") {
+                roomMessages = repository.getAllMessages()
+            } else {
+                roomMessages = repository.getMessagesForChat(currentRoom)
+            }
         }
+    }
+
+    // Auto scroll to bottom when new messages arrive
+    LaunchedEffect(roomMessages.size) {
+        if (roomMessages.isNotEmpty()) {
+            listState.animateScrollToItem(roomMessages.size - 1)
+        }
+    }
+
+    // Back handler: reset to "all" messages if on a specific user filter
+    BackHandler(enabled = selectedUserRoom != null && selectedUserRoom != "all") {
+        selectedUserRoom = "all"
+        replyToMessage = null
+        editingMessage = null
+        inputText = ""
+        refreshTrigger++
     }
 
     Column(
         modifier = modifier
             .background(Color(0xFF121B22))
-            .padding(12.dp)
+            .padding(10.dp)
             .imePadding(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 1. Header Card (Sleek design with title and Delete/Clear All)
+        // 1. Header Card with Title and Actions
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF1F2C34), shape = RoundedCornerShape(16.dp))
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column {
                 Text(
-                    text = "گفتگوی محلی 💬",
-                    fontSize = 16.sp,
+                    text = "گفتگو و تبادل پیام 💬",
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
+                val allMsgsCount = repository.getAllMessages().size
                 Text(
-                    text = "گفتگوی مستقیم با تمامی کاربران متصل به برنامه",
-                    fontSize = 10.sp,
-                    color = Color(0xFF8696A0)
+                    text = if (selectedUserRoom == null || selectedUserRoom == "all") 
+                        "$allMsgsCount پیام (${chatRooms.size} مخاطب)" 
+                    else 
+                        "گفتگو با «$selectedUserRoom» (${roomMessages.size} پیام)",
+                    fontSize = 11.sp,
+                    color = Color(0xFF00A884)
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // New Chat Button
+                Button(
+                    onClick = {
+                        newChatUsernameInput = ""
+                        showNewChatDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A884)),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "جدید", tint = Color.White, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("کاربر جدید", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+
                 IconButton(
-                    onClick = { refreshTrigger++; Toast.makeText(context, "بروزرسانی انجام شد", Toast.LENGTH_SHORT).show() }
+                    onClick = {
+                        refreshTrigger++
+                        Toast.makeText(context, "بروزرسانی شد", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.size(34.dp)
                 ) {
                     Icon(Icons.Default.Refresh, "بروزرسانی", tint = Color(0xFF00A884))
                 }
-                if (messagesList.isNotEmpty()) {
-                    IconButton(onClick = { confirmClearDialog = true }) {
-                        Icon(Icons.Default.Delete, "حذف همه", tint = Color(0xFFF87171))
+
+                if (selectedUserRoom != null && selectedUserRoom != "all") {
+                    IconButton(
+                        onClick = { roomToDelete = selectedUserRoom },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, "حذف گفتگوی این کاربر", tint = Color(0xFFF87171))
+                    }
+                } else if (repository.getAllMessages().isNotEmpty()) {
+                    IconButton(
+                        onClick = { confirmClearAllDialog = true },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, "حذف همه پیام‌ها", tint = Color(0xFFF87171))
                     }
                 }
             }
         }
 
-        // 2. Main Messages Container
+        // 2. Horizontal User / Folder Selector Chips
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val isAllSelected = selectedUserRoom == null || selectedUserRoom == "all"
+            val totalAllCount = repository.getAllMessages().size
+            val totalUnread = chatRooms.sumOf { it.unreadCount }
+
+            // Chip 1: All Messages
+            Box(
+                modifier = Modifier
+                    .background(if (isAllSelected) Color(0xFF00A884) else Color(0xFF1F2C34), shape = RoundedCornerShape(20.dp))
+                    .border(BorderStroke(1.dp, if (isAllSelected) Color(0xFF00A884) else Color(0xFF2A3942)), RoundedCornerShape(20.dp))
+                    .clickable {
+                        selectedUserRoom = "all"
+                        replyToMessage = null
+                        editingMessage = null
+                        refreshTrigger++
+                    }
+                    .padding(horizontal = 12.dp, vertical = 7.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "🌐 همه پیام‌ها ($totalAllCount)",
+                        fontSize = 12.sp,
+                        fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isAllSelected) Color.White else Color(0xFF8696A0)
+                    )
+                    if (totalUnread > 0 && !isAllSelected) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF25D366), CircleShape)
+                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                        ) {
+                            Text(totalUnread.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF121B22))
+                        }
+                    }
+                }
+            }
+
+            // Chips for each user
+            chatRooms.forEach { room ->
+                val isSelected = selectedUserRoom?.equals(room.username, ignoreCase = true) == true
+                Box(
+                    modifier = Modifier
+                        .background(if (isSelected) Color(0xFF00A884) else Color(0xFF1F2C34), shape = RoundedCornerShape(20.dp))
+                        .border(BorderStroke(1.dp, if (isSelected) Color(0xFF00A884) else Color(0xFF2A3942)), RoundedCornerShape(20.dp))
+                        .clickable {
+                            selectedUserRoom = room.username
+                            replyToMessage = null
+                            editingMessage = null
+                            repository.markChatAsRead(room.username)
+                            refreshTrigger++
+                        }
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        // Online indicator dot
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .background(if (room.isOnline) Color(0xFF25D366) else Color(0xFF8696A0), CircleShape)
+                        )
+
+                        Text(
+                            text = room.username,
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) Color.White else Color.White
+                        )
+
+                        if (room.unreadCount > 0 && !isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .background(Color(0xFF25D366), CircleShape)
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(room.unreadCount.toString(), fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF121B22))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Chat Messages Container
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
+                .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFF0B141A))
-                .border(BorderStroke(1.dp, Color(0xFF222E35)), RoundedCornerShape(20.dp))
+                .border(BorderStroke(1.dp, Color(0xFF222E35)), RoundedCornerShape(16.dp))
                 .padding(vertical = 8.dp, horizontal = 4.dp)
         ) {
-            if (messagesList.isEmpty()) {
+            if (roomMessages.isEmpty()) {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text("💬", fontSize = 42.sp)
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "هیچ پیامی ثبت نشده است",
+                        text = if (selectedUserRoom == null || selectedUserRoom == "all") 
+                            "هنوز پیامی در برنامه ثبت نشده است" 
+                        else 
+                            "هنوز پیامی با «$selectedUserRoom» تبادل نشده است",
                         fontSize = 13.sp,
                         color = Color(0xFF8696A0),
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "کلاینت‌ها می‌توانند پس از اتصال، برای شما پیام ارسال کنند.",
+                        text = "می‌توانید از کادر زیر پیام متنی یا فایل ارسال کنید تا در وب و اپ نمایش داده شود.",
                         fontSize = 11.sp,
                         color = Color(0xFF8696A0).copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
@@ -1310,10 +1474,10 @@ fun FileShareMessages(
             } else {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(messagesList) { msg ->
+                    items(roomMessages) { msg ->
                         MessageBubble(
                             msg = msg,
                             repository = repository,
@@ -1337,7 +1501,7 @@ fun FileShareMessages(
             }
         }
 
-        // 3. Floating Upload Display (if there's any upload progress)
+        // 4. Floating Upload Display
         if (isChatUploading) {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
@@ -1346,9 +1510,9 @@ fun FileShareMessages(
                 border = BorderStroke(1.dp, Color(0xFF2A3942))
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text("⏳", fontSize = 18.sp)
                     Column(modifier = Modifier.weight(1f)) {
@@ -1376,7 +1540,7 @@ fun FileShareMessages(
             }
         }
 
-        // 4. Reply / Edit Previews above Input Area
+        // 5. Reply / Edit Previews above Input Area
         if (replyToMessage != null) {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
@@ -1385,7 +1549,7 @@ fun FileShareMessages(
                 border = BorderStroke(1.dp, Color(0xFF2A3942))
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -1419,7 +1583,7 @@ fun FileShareMessages(
                 border = BorderStroke(1.dp, Color(0xFF2A3942))
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -1448,7 +1612,14 @@ fun FileShareMessages(
             }
         }
 
-        // 5. Input Pill Bar
+        // 6. Unified Input Bar
+        val placeholderText = if (selectedUserRoom != null && selectedUserRoom != "all") 
+            "پیام برای $selectedUserRoom..." 
+        else if (replyToMessage != null) 
+            "پاسخ به ${replyToMessage!!.from}..." 
+        else 
+            "نوشتن پیام عمومی..."
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1463,21 +1634,20 @@ fun FileShareMessages(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 2.dp),
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "📎",
-                        fontSize = 20.sp,
-                        modifier = Modifier.padding(end = 8.dp).clickable {
-                            chatFilePickerLauncher.launch("*/*")
-                        }
-                    )
+                    IconButton(
+                        onClick = { chatFilePickerLauncher.launch("*/*") },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Text("📎", fontSize = 18.sp)
+                    }
 
                     OutlinedTextField(
                         value = inputText,
                         onValueChange = { inputText = it },
-                        placeholder = { Text("تایپ پیام...", fontSize = 13.sp, color = Color(0xFF8696A0)) },
+                        placeholder = { Text(placeholderText, fontSize = 12.sp, color = Color(0xFF8696A0)) },
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Color.White,
@@ -1496,7 +1666,7 @@ fun FileShareMessages(
 
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(46.dp)
                     .background(Color(0xFF00A884), shape = CircleShape)
                     .clickable {
                         if (inputText.trim().isNotEmpty()) {
@@ -1504,10 +1674,19 @@ fun FileShareMessages(
                                 repository.editMessage(editingMessage!!.id, editingMessage!!.from, inputText.trim())
                                 editingMessage = null
                             } else {
+                                val targetChat = if (selectedUserRoom != null && selectedUserRoom != "all") {
+                                    selectedUserRoom
+                                } else if (replyToMessage != null && !replyToMessage!!.from.contains("مدیر") && !replyToMessage!!.from.contains("گوشی")) {
+                                    replyToMessage!!.from
+                                } else {
+                                    null
+                                }
+
                                 repository.addMessage(
                                     from = "مدیر شبکه (گوشی)",
                                     text = inputText.trim(),
                                     senderId = "host_admin",
+                                    chatId = targetChat,
                                     replyToId = replyToMessage?.id,
                                     replyToText = replyToMessage?.text,
                                     replyToUser = replyToMessage?.from
@@ -1524,25 +1703,138 @@ fun FileShareMessages(
                     imageVector = if (editingMessage != null) Icons.Default.Done else Icons.Default.Send,
                     contentDescription = if (editingMessage != null) "بروزرسانی" else "ارسال",
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
         }
     }
 
-    // Confirmation Clear Dialog
-    if (confirmClearDialog) {
+    // ==========================================
+    // DIALOGS
+    // ==========================================
+
+    // 1. Dialog: New Chat with Username
+    if (showNewChatDialog) {
         AlertDialog(
-            onDismissRequest = { confirmClearDialog = false },
-            title = { Text("پاک‌سازی تاریخچه گفتگوها", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White) },
-            text = { Text("آیا مطمئن هستید که می‌خواهید تمامی پیام‌ها را به طور کلی حذف نمایید؟", fontSize = 13.sp, color = Color(0xFFCAC4D0)) },
+            onDismissRequest = { showNewChatDialog = false },
+            title = {
+                Text(
+                    text = "ایجاد گفتگوی جدید",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "نام کاربری مورد نظر را وارد کنید (می‌توانید برای کاربری که هنوز وارد نشده هم پیام پیش‌فرض بگذارید):",
+                        fontSize = 12.sp,
+                        color = Color(0xFFCAC4D0)
+                    )
+                    OutlinedTextField(
+                        value = newChatUsernameInput,
+                        onValueChange = { newChatUsernameInput = it },
+                        placeholder = { Text("مثلاً: کاربر وب یا علی", fontSize = 12.sp, color = Color(0xFF8696A0)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = Color(0xFF00A884),
+                            unfocusedBorderColor = Color(0xFF2A3942),
+                            focusedContainerColor = Color(0xFF121B22),
+                            unfocusedContainerColor = Color(0xFF121B22)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            containerColor = Color(0xFF1F2C34),
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanName = newChatUsernameInput.trim()
+                        if (cleanName.isNotEmpty()) {
+                            showNewChatDialog = false
+                            selectedUserRoom = cleanName
+                            refreshTrigger++
+                        } else {
+                            Toast.makeText(context, "لطفاً نام کاربری را وارد کنید", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A884)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("شروع گفتگو", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewChatDialog = false }) {
+                    Text("انصراف", color = Color(0xFF8696A0))
+                }
+            }
+        )
+    }
+
+    // 2. Dialog: Delete Single User Chat Room
+    if (roomToDelete != null) {
+        val target = roomToDelete!!
+        AlertDialog(
+            onDismissRequest = { roomToDelete = null },
+            title = {
+                Text(
+                    text = "حذف گفتگوی «$target»",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            },
+            text = {
+                Text(
+                    text = "آیا مطمئن هستید که می‌خواهید تمام پیام‌ها و پوشه گفتگوی «$target» را حذف کنید؟",
+                    fontSize = 13.sp,
+                    color = Color(0xFFCAC4D0)
+                )
+            },
+            containerColor = Color(0xFF1F2C34),
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        repository.deleteChatRoom(target)
+                        if (selectedUserRoom == target) {
+                            selectedUserRoom = null
+                        }
+                        roomToDelete = null
+                        refreshTrigger++
+                        Toast.makeText(context, "گفتگوی «$target» حذف شد.", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Text("بله، حذف شود", color = Color(0xFFF87171), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { roomToDelete = null }) {
+                    Text("انصراف", color = Color(0xFF00A884))
+                }
+            }
+        )
+    }
+
+    // 3. Dialog: Confirmation Clear All Dialog
+    if (confirmClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { confirmClearAllDialog = false },
+            title = { Text("پاک‌سازی تاریخچه تمامی گفتگوها", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White) },
+            text = { Text("آیا مطمئن هستید که می‌خواهید تمامی پیام‌ها و پوشه‌های تمامی کاربران را به طور کلی حذف نمایید؟", fontSize = 13.sp, color = Color(0xFFCAC4D0)) },
             containerColor = Color(0xFF1F2C34),
             confirmButton = {
                 TextButton(
                     onClick = {
                         repository.deleteAllMessages()
+                        selectedUserRoom = null
                         refreshTrigger++
-                        confirmClearDialog = false
+                        confirmClearAllDialog = false
                         Toast.makeText(context, "تمامی گفتگوها با موفقیت پاک‌سازی شدند.", Toast.LENGTH_SHORT).show()
                     }
                 ) {
@@ -1550,11 +1842,143 @@ fun FileShareMessages(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmClearDialog = false }) {
+                TextButton(onClick = { confirmClearAllDialog = false }) {
                     Text("انصراف", color = Color(0xFF00A884))
                 }
             }
         )
+    }
+}
+
+@Composable
+fun UserChatFolderCard(
+    room: ChatRoomSummary,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
+        border = BorderStroke(1.dp, if (room.unreadCount > 0) Color(0xFF00A884) else Color(0xFF2A3942))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // User Avatar Container
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(Color(0xFF2A3942), shape = CircleShape)
+                    .border(1.5.dp, if (room.isOnline) Color(0xFF00A884) else Color(0xFF3B4A54), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (room.username.isNotEmpty()) room.username.take(1).uppercase() else "👤",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+
+                // Online indicator badge
+                if (room.isOnline) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(12.dp)
+                            .background(Color(0xFF00A884), CircleShape)
+                            .border(2.dp, Color(0xFF1F2C34), CircleShape)
+                    )
+                }
+            }
+
+            // User & Last Message Info
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = room.username,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    if (room.lastTimestamp.isNotEmpty()) {
+                        val timeDisplay = try {
+                            val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                            iso.timeZone = TimeZone.getTimeZone("UTC")
+                            val date = iso.parse(room.lastTimestamp)
+                            if (date != null) SimpleDateFormat("HH:mm", Locale.getDefault()).format(date) else ""
+                        } catch (e: Exception) {
+                            ""
+                        }
+                        if (timeDisplay.isNotEmpty()) {
+                            Text(
+                                text = timeDisplay,
+                                fontSize = 11.sp,
+                                color = if (room.unreadCount > 0) Color(0xFF00A884) else Color(0xFF8696A0)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = room.lastMessage,
+                        fontSize = 12.sp,
+                        color = Color(0xFF8696A0),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    if (room.unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF00A884), shape = RoundedCornerShape(10.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "${room.unreadCount}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Delete folder button
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "حذف پوشه گفتگو",
+                    tint = Color(0xFFF87171).copy(alpha = 0.7f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
 }
 
@@ -2168,51 +2592,86 @@ fun FileShareLogs(
         }
     }
 
+    var fileSearchQuery by remember { mutableStateOf("") }
+    val filteredFilesList = remember(filesList, fileSearchQuery) {
+        if (fileSearchQuery.isBlank()) filesList
+        else filesList.filter { it.name.contains(fileSearchQuery, ignoreCase = true) }
+    }
+    val totalBytes = remember(filesList) { filesList.sumOf { it.size } }
+
     Column(
         modifier = modifier
             .background(Color(0xFF121B22))
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // App header inside log list
+        // App header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "مدیریت فایل‌های تبادل شده",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0x2200A884)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderOpen,
+                        contentDescription = null,
+                        tint = Color(0xFF00A884),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Text(
+                    text = "مدیریت فایل‌های تبادل شده",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
             
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Button(
                     onClick = { hostFilePickerLauncher.launch("*/*") },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A884)),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     enabled = !hostIsUploading
                 ) {
                     if (hostIsUploading && hostUploadStateText == "Uploading") {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), color = Color.White)
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
                     } else {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                             Text("آپلود فایل", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
                 
-                IconButton(onClick = { refreshTrigger++ }) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF1F2C34))
+                        .border(BorderStroke(1.dp, Color(0xFF2A3942)), RoundedCornerShape(10.dp))
+                        .clickable { refreshTrigger++ },
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "بروزرسانی",
-                        tint = Color(0xFF00A884)
+                        tint = Color(0xFF00A884),
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -2224,14 +2683,55 @@ fun FileShareLogs(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatsCard(
-                title = "تعداد کل فایل‌ها",
+                title = "کل فایل‌ها",
                 value = "${filesList.size}",
+                icon = Icons.Default.FolderOpen,
+                accentColor = Color(0xFF00A884),
                 modifier = Modifier.weight(1f)
             )
             StatsCard(
-                title = "فایل‌های آپلودی",
+                title = "آپلودی‌ها",
                 value = "${filesList.count { it.source == "upload" }}",
+                icon = Icons.Default.CloudUpload,
+                accentColor = Color(0xFF38BDF8),
                 modifier = Modifier.weight(1f)
+            )
+            StatsCard(
+                title = "حجم کل",
+                value = formatBytes(totalBytes),
+                icon = Icons.Default.Storage,
+                accentColor = Color(0xFFFBBF24),
+                modifier = Modifier.weight(1.1f)
+            )
+        }
+
+        // Search Bar (shown if there are files)
+        if (filesList.size > 1) {
+            OutlinedTextField(
+                value = fileSearchQuery,
+                onValueChange = { fileSearchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("جستجو در فایل‌ها...", color = Color(0xFF8696A0), fontSize = 12.sp) },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = "جستجو", tint = Color(0xFF00A884), modifier = Modifier.size(18.dp))
+                },
+                trailingIcon = {
+                    if (fileSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { fileSearchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Clear, contentDescription = "پاک کردن", tint = Color(0xFF8696A0), modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF00A884),
+                    unfocusedBorderColor = Color(0xFF2A3942),
+                    focusedContainerColor = Color(0xFF192229),
+                    unfocusedContainerColor = Color(0xFF192229),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                singleLine = true
             )
         }
 
@@ -2241,27 +2741,44 @@ fun FileShareLogs(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-                border = BorderStroke(1.dp, Color(0xFF2A3942))
+                border = BorderStroke(1.dp, Color(0xFF00A884).copy(alpha = 0.4f))
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("⏳", fontSize = 18.sp)
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x2000A884)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = null,
+                            tint = Color(0xFF00A884),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (hostUploadStateText == "Uploading") "در حال آپلود: $hostUploadFileName" else "آپلود $hostUploadFileName: ${if (hostUploadStateText == "Success") "موفق" else if (hostUploadStateText == "Canceled") "لغو شد" else "ناموفق"}",
                             fontSize = 12.sp,
                             color = Color.White,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         
                         LinearProgressIndicator(
                             progress = { hostUploadProgress },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
                             color = if (hostUploadStateText == "Success") Color(0xFF4CAF50) else if (hostUploadStateText == "Failed") Color(0xFFEF4444) else Color(0xFF00A884),
                             trackColor = Color(0xFF2A3942)
                         )
@@ -2270,13 +2787,13 @@ fun FileShareLogs(
                             text = "${formatBytes(hostUploadedBytes)} از ${formatBytes(hostTotalBytes)}",
                             fontSize = 10.sp,
                             color = Color(0xFF8696A0),
-                            modifier = Modifier.padding(top = 2.dp)
+                            modifier = Modifier.padding(top = 4.dp)
                         )
                     }
                     
                     Text(
                         text = "${(hostUploadProgress * 100).toInt()}%",
-                        fontSize = 12.sp,
+                        fontSize = 13.sp,
                         color = Color(0xFF00A884),
                         fontWeight = FontWeight.Bold
                     )
@@ -2286,9 +2803,14 @@ fun FileShareLogs(
                             onClick = {
                                 hostUploadCanceled = true
                             },
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(32.dp)
                         ) {
-                            Text("❌", fontSize = 14.sp)
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "لغو آپلود",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 }
@@ -2300,41 +2822,57 @@ fun FileShareLogs(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
             border = BorderStroke(1.dp, Color(0xFF2A3942))
         ) {
-            if (filesList.isEmpty()) {
+            if (filteredFilesList.isEmpty()) {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("📁", fontSize = 42.sp)
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x1594A3B8)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FolderOpen,
+                            contentDescription = null,
+                            tint = Color(0xFF8696A0),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "هیچ فایلی یافت نشد",
-                        fontSize = 13.sp,
-                        color = Color(0xFF938F99),
+                        text = if (fileSearchQuery.isNotEmpty()) "فایلی با این نام یافت نشد" else "هیچ فایلی یافت نشد",
+                        fontSize = 14.sp,
+                        color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "فایل‌های آپلود شده یا پوشه انتخابی اشتراکی در اینجا لیست می‌شوند.",
-                        fontSize = 10.sp,
-                        color = Color(0xFF938F99).copy(alpha = 0.7f),
+                        text = if (fileSearchQuery.isNotEmpty()) "عبارت دیگری را جستجو کنید." else "فایل‌های آپلود شده یا پوشه انتخابی اشتراکی در اینجا لیست می‌شوند.",
+                        fontSize = 11.sp,
+                        color = Color(0xFF8696A0),
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 24.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     )
                 }
             } else {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp)
-                        .verticalScroll(rememberScrollState())
+                        .padding(10.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    for (file in filesList) {
+                    for (file in filteredFilesList) {
                         FileRowItem(
                             file = file,
                             onOpen = {
@@ -2347,13 +2885,6 @@ fun FileShareLogs(
                                 fileToDelete = file
                                 showDeleteDialog = true
                             }
-                        )
-                        // Small border separation
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(Color(0xFF49454F).copy(alpha = 0.4f))
                         )
                     }
                 }
@@ -2485,33 +3016,59 @@ fun FileShareLogs(
 fun StatsCard(
     title: String,
     value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    accentColor: Color = Color(0xFF00A884),
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.height(72.dp),
+        modifier = modifier.height(76.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
         border = BorderStroke(1.dp, Color(0xFF2A3942))
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = title,
-                fontSize = 10.sp,
-                color = Color(0xFF8696A0),
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = value,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Light,
-                color = Color.White
-            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 10.sp,
+                    color = Color(0xFF8696A0),
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            if (icon != null) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(accentColor.copy(alpha = 0.16f))
+                        .border(BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -2528,145 +3085,146 @@ fun FileRowItem(
         val mb = kb / 1024.0
         if (mb >= 1.0) String.format("%.1f MB", mb) else String.format("%.1f KB", kb)
     }
+    val categoryInfo = remember(file.name) { getFileCategoryInfo(file.name) }
 
-    Column(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF192229)),
+        border = BorderStroke(1.dp, Color(0xFF283742))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            // Leading File Vector Icon Badge
+            FileVectorIconBadge(
+                filename = file.name,
+                size = 46.dp
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // File Info
+            Column(
                 modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = if (file.source == "upload") "📥" else "📂",
-                    fontSize = 20.sp,
-                    modifier = Modifier.padding(end = 12.dp)
+                    text = file.name,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Column(modifier = Modifier.weight(1f)) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Source badge
                     Text(
-                        text = file.name,
-                        fontSize = 13.sp,
+                        text = if (file.source == "upload") "مخزن آپلود" else "پوشه اشتراکی",
+                        fontSize = 9.sp,
+                        color = if (file.source == "upload") Color(0xFF4ADE80) else Color(0xFFC084FC),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier
+                            .background(
+                                color = if (file.source == "upload") Color(0x2822C55E) else Color(0x28A855F7),
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = if (file.source == "upload") "مخزن آپلود" else "پوشه اشتراکی",
-                            fontSize = 9.sp,
-                            color = if (file.source == "upload") Color(0xFFB2F2BB) else Color(0xFF00A884),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .background(
-                                    color = if (file.source == "upload") Color(0xFF2E3B2E) else Color(0xFF005C4B),
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                        Text(
-                            text = sizeStr,
-                            fontSize = 10.sp,
-                            color = Color(0xFF8696A0)
-                        )
-                    }
+
+                    // Category tag
+                    Text(
+                        text = categoryInfo.label,
+                        fontSize = 9.sp,
+                        color = categoryInfo.iconColor,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .background(
+                                color = categoryInfo.backgroundColor,
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+
+                    // Size
+                    Text(
+                        text = sizeStr,
+                        fontSize = 10.sp,
+                        color = Color(0xFF94A3B8)
+                    )
                 }
             }
-        }
 
-        // Action Buttons Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Open Button
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Vector Icon Action Buttons
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF005C4B))
-                    .clickable { onOpen() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "باز کردن",
-                    tint = Color.White,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "باز کردن",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Share Button
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF202C33))
-                    .border(BorderStroke(1.dp, Color(0xFF3B4A54)), RoundedCornerShape(8.dp))
-                    .clickable { onShare() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = "اشتراک‌گذاری",
-                    tint = Color(0xFF00A884),
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "اشتراک",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF00A884)
-                )
-            }
-
-            if (file.canDelete) {
-                Spacer(modifier = Modifier.width(10.dp))
-                // Delete Button
-                Row(
+                // Open / Play button
+                Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x33F87171))
-                        .border(BorderStroke(1.dp, Color(0x66F87171)), RoundedCornerShape(8.dp))
-                        .clickable { onDelete() }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF005C4B))
+                        .border(BorderStroke(1.dp, Color(0xFF00A884).copy(alpha = 0.5f)), RoundedCornerShape(10.dp))
+                        .clickable { onOpen() },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "حذف",
-                        tint = Color(0xFFF87171),
-                        modifier = Modifier.size(14.dp)
+                        imageVector = Icons.Default.OpenInNew,
+                        contentDescription = "باز کردن فایل",
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "حذف",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFF87171)
+                }
+
+                // Share button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF14242D))
+                        .border(BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f)), RoundedCornerShape(10.dp))
+                        .clickable { onShare() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "اشتراک‌گذاری",
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(17.dp)
                     )
+                }
+
+                // Delete button
+                if (file.canDelete) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0x22EF4444))
+                            .border(BorderStroke(1.dp, Color(0x55EF4444)), RoundedCornerShape(10.dp))
+                            .clickable { onDelete() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "حذف فایل",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
                 }
             }
         }

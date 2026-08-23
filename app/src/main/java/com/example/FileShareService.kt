@@ -55,7 +55,7 @@ class FileShareService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        repository = FileShareRepository(applicationContext)
+        repository = FileShareRepository.getInstance(applicationContext)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

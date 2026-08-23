@@ -558,6 +558,7 @@
       chatTabBtn.classList.add('active');
       chatPanel.classList.add('active');
       loadMessages();
+      startChatPolling();
     } else if (tab === 'guide') {
       guideTabBtn.classList.add('active');
       guidePanel.classList.add('active');
@@ -854,14 +855,19 @@
 
   async function loadMessages() {
     try {
-      const res = await fetch('/api/messages', {
+      if (nicknameInput && !nicknameInput.value.trim() && sessionNickname) {
+        nicknameInput.value = sessionNickname;
+      }
+      const currentNick = (nicknameInput && nicknameInput.value.trim()) || sessionNickname || localStorage.getItem('webNickname') || '';
+      const url = currentNick ? `/api/messages?username=${encodeURIComponent(currentNick)}` : '/api/messages';
+      const res = await fetch(url, {
         headers: { 'X-Web-Session-Id': webSessionId }
       });
       if (!res.ok) return;
       const messages = await res.json();
       
       if (!messages.length) {
-        chatMessageList.innerHTML = '<div class="es"><span class="esi">💬</span>هنوز پیامی وجود ندارد. گفتگو را آغاز کنید!</div>';
+        chatMessageList.innerHTML = `<div class="es"><span class="esi">💬</span>هنوز پیامی در گفتگوی ${currentNick ? `«${escapeHtml(currentNick)}»` : 'شما'} ثبت نشده است. گفتگو را آغاز کنید!</div>`;
         return;
       }
       
@@ -871,7 +877,8 @@
         const row = document.createElement('div');
         row.className = 'msgRow';
         
-        const safeFrom = escapeHtml(msg.from || 'کاربر ناشناس');
+        const isHost = (msg.from || '').includes('مدیر') || (msg.from || '').includes('گوشی') || msg.senderId === 'host_admin';
+        const safeFrom = escapeHtml(msg.from || (isHost ? 'مدیر برنامه' : 'کاربر'));
         const safeText = escapeHtml(msg.text || '');
         const timeStr = fmtDate(msg.created);
         const editedLabel = msg.edited ? ' <span style="font-size:10px; color:var(--text3);">(ویرایش شده)</span>' : '';
@@ -886,19 +893,27 @@
           `;
         }
         
+        const senderBadge = isHost 
+          ? `<span style="background:rgba(74,222,128,0.15); color:#4ade80; border:1px solid rgba(74,222,128,0.3); padding:2px 8px; border-radius:6px; font-weight:800; font-size:11px;">👑 ${safeFrom}${editedLabel}</span>`
+          : `<span class="msgFrom">📱 ${safeFrom}${editedLabel}</span>`;
+
+        const rowStyle = isHost 
+          ? 'background:rgba(0,168,132,0.06); border:1px solid rgba(0,168,132,0.25); border-radius:var(--rs); padding:12px 14px; margin-bottom:10px;'
+          : 'background:var(--bg3); border:1px solid var(--border); border-radius:var(--rs); padding:12px 14px; margin-bottom:10px;';
+
         row.innerHTML = `
-          <div class="msgBody" style="width: 100%;">
-            <div class="msgMeta">
-              <span class="msgFrom">${safeFrom}${editedLabel}</span>
-              <span>🕐 ${timeStr}</span>
+          <div class="msgBody" style="width: 100%; ${rowStyle}">
+            <div class="msgMeta" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              ${senderBadge}
+              <span style="font-size:11px; color:var(--text3);">🕐 ${timeStr}</span>
             </div>
             ${replyHtml}
-            <div class="msgText">${safeText}</div>
-            <div class="msgBtns" style="margin-top: 6px;">
-              <button class="btn bd" style="padding: 4px 10px; min-height: 28px; font-size: 11px; margin-left: 4px;" type="button" data-reply-id="${msg.id}" data-reply-user="${safeFrom}" data-reply-text="${safeText}">پاسخ</button>
-              <button class="btn bd" style="padding: 4px 10px; min-height: 28px; font-size: 11px; margin-left: 4px;" type="button" data-edit-id="${msg.id}" data-edit-text="${safeText}" data-edit-user="${safeFrom}">ویرایش</button>
-              <button class="btn bd" style="padding: 4px 10px; min-height: 28px; font-size: 11px; margin-left: 4px;" type="button" data-copy-text="${encodeURIComponent(msg.text)}">کپی</button>
-              <button class="btn bd br" style="padding: 4px 10px; min-height: 28px; font-size: 11px;" type="button" data-delete-msg="${msg.id}">حذف</button>
+            <div class="msgText" style="font-size:14px; line-height:1.7; color:var(--text);">${safeText}</div>
+            <div class="msgBtns" style="margin-top: 8px; display:flex; gap:6px; flex-wrap:wrap;">
+              <button class="btn bd" style="padding: 3px 9px; min-height: 26px; font-size: 11px;" type="button" data-reply-id="${msg.id}" data-reply-user="${safeFrom}" data-reply-text="${safeText}">پاسخ</button>
+              ${!isHost ? `<button class="btn bd" style="padding: 3px 9px; min-height: 26px; font-size: 11px;" type="button" data-edit-id="${msg.id}" data-edit-text="${safeText}" data-edit-user="${safeFrom}">ویرایش</button>` : ''}
+              <button class="btn bd" style="padding: 3px 9px; min-height: 26px; font-size: 11px;" type="button" data-copy-text="${encodeURIComponent(msg.text)}">کپی</button>
+              <button class="btn bd br" style="padding: 3px 9px; min-height: 26px; font-size: 11px;" type="button" data-delete-msg="${msg.id}">حذف</button>
             </div>
           </div>
         `;
@@ -919,12 +934,13 @@
     const text = chatInput.value.trim();
     if (!text) return;
     
-    const nick = nicknameInput.value.trim() || sessionNickname || 'کاربر وب';
+    const nick = (nicknameInput && nicknameInput.value.trim()) || sessionNickname || localStorage.getItem('webNickname') || 'کاربر وب';
     sendChatBtn.disabled = true;
     
     try {
       const payload = {
         from: nick,
+        chatId: nick,
         text: text
       };
       if (activeReplyTo) {
@@ -950,6 +966,19 @@
     } finally {
       sendChatBtn.disabled = false;
     }
+  }
+
+  if (nicknameInput) {
+    const updateNick = () => {
+      const nick = nicknameInput.value.trim();
+      if (nick) {
+        sessionNickname = nick;
+        localStorage.setItem('webNickname', nick);
+        loadMessages();
+      }
+    };
+    nicknameInput.addEventListener('input', updateNick);
+    nicknameInput.addEventListener('change', updateNick);
   }
 
   sendChatBtn.addEventListener('click', sendMessage);

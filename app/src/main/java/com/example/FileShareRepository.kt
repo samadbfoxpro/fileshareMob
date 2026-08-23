@@ -95,11 +95,28 @@ data class FileItem(
     val canDelete: Boolean
 )
 
-class FileShareRepository(private val context: Context) {
+data class ChatRoomSummary(
+    val username: String,
+    val lastMessage: String,
+    val lastTimestamp: String,
+    val unreadCount: Int,
+    val isOnline: Boolean,
+    val avatar: String = "🧑‍💻"
+)
+
+class FileShareRepository private constructor(private val context: Context) {
 
     companion object {
+        var isChatScreenActive = false
+        
         @Volatile
-        var isChatScreenActive: Boolean = false
+        private var instance: FileShareRepository? = null
+        
+        fun getInstance(context: Context): FileShareRepository {
+            return instance ?: synchronized(this) {
+                instance ?: FileShareRepository(context.applicationContext).also { instance = it }
+            }
+        }
     }
 
     private val baseDir: File by lazy {
@@ -152,6 +169,9 @@ class FileShareRepository(private val context: Context) {
     private val uploadsDir: File
         get() = getCustomUploadsDir()
 
+    private val inMemoryMessages = mutableListOf<Message>()
+    private var isMessagesLoaded = false
+
     private val messagesFile: File by lazy {
         File(baseDir, "messages.jsonl")
     }
@@ -176,6 +196,33 @@ class FileShareRepository(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        ensureMessagesLoaded()
+    }
+
+    @Synchronized
+    private fun ensureMessagesLoaded() {
+        if (isMessagesLoaded) return
+        inMemoryMessages.clear()
+        if (messagesFile.exists()) {
+            try {
+                BufferedReader(InputStreamReader(FileInputStream(messagesFile), "UTF-8")).use { reader ->
+                    var line: String?
+                    while (reader.readLine().also { line = it } != null) {
+                        val trimmed = line!!.trim()
+                        if (trimmed.isEmpty()) continue
+                        try {
+                            val obj = JSONObject(trimmed)
+                            inMemoryMessages.add(Message.fromJsonObject(obj))
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        isMessagesLoaded = true
     }
 
     // --- SHARED FOLDER MANAGEMENT ---
@@ -504,28 +551,8 @@ class FileShareRepository(private val context: Context) {
 
     @Synchronized
     fun getAllMessages(): List<Message> {
-        val list = mutableListOf<Message>()
-        if (!messagesFile.exists()) return list
-
-        try {
-            BufferedReader(InputStreamReader(FileInputStream(messagesFile), "UTF-8")).use { reader ->
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    val trimmed = line!!.trim()
-                    if (trimmed.isEmpty()) continue
-                    try {
-                        val obj = JSONObject(trimmed)
-                        list.add(Message.fromJsonObject(obj))
-                    } catch (e: Exception) {
-                        // Resilient check: Skip broken json lines
-                        e.printStackTrace()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return list
+        ensureMessagesLoaded()
+        return ArrayList(inMemoryMessages)
     }
 
     @Synchronized
@@ -546,6 +573,7 @@ class FileShareRepository(private val context: Context) {
         replyToText: String? = null,
         replyToUser: String? = null
     ): Message {
+        ensureMessagesLoaded()
         val id = System.currentTimeMillis() + (0..999).random()
         val created = getCurrentIso8601()
         val isFromMe = from.contains("مدیر") || from.contains("گوشی") || (senderId != null && senderId == getClientUserId())
@@ -574,6 +602,7 @@ class FileShareRepository(private val context: Context) {
             replyToUser = replyToUser
         )
 
+        inMemoryMessages.add(message)
         saveMessageLine(message)
 
         if (!isChatScreenActive && !isFromMe) {
@@ -585,60 +614,186 @@ class FileShareRepository(private val context: Context) {
 
     @Synchronized
     fun markAllMessagesAsRead() {
-        val messages = getAllMessages()
+        ensureMessagesLoaded()
         var changed = false
-        val updated = messages.map {
+        for (i in inMemoryMessages.indices) {
+            val it = inMemoryMessages[i]
             if (!it.from.contains("مدیر") && !it.from.contains("گوشی") && it.status == "delivered") {
                 changed = true
-                it.copy(status = "read")
-            } else {
-                it
+                inMemoryMessages[i] = it.copy(status = "read")
             }
         }
         if (changed) {
-            rewriteMessagesFile(updated)
+            rewriteMessagesFile(inMemoryMessages)
         }
     }
 
     @Synchronized
-    fun markHostMessagesAsRead() {
-        val messages = getAllMessages()
+    fun getChatRooms(): List<ChatRoomSummary> {
+        val allMessages = getAllMessages()
+        val userNames = linkedSetOf<String>()
+        
+        // 1. Add from active web sessions
+        val webSessions = WebSessionApprovalManager.getAllSessions()
+        for (ws in webSessions) {
+            val nick = ws.nickname.trim()
+            if (nick.isNotEmpty() && !nick.contains("مدیر") && !nick.contains("گوشی") && nick != "host_admin") {
+                userNames.add(nick)
+            }
+        }
+
+        // 2. Add from trusted peers
+        val trusted = getTrustedPeers()
+        for (tp in trusted) {
+            val nick = tp.nickname.trim()
+            if (nick.isNotEmpty() && !nick.contains("مدیر") && !nick.contains("گوشی") && nick != "host_admin") {
+                userNames.add(nick)
+            }
+        }
+
+        // 3. Add from messages history
+        for (m in allMessages) {
+            val isHost = m.from.contains("مدیر") || m.from.contains("گوشی") || m.senderId == "host_admin"
+            val fromName = m.from.trim()
+            if (!isHost && fromName.isNotEmpty()) {
+                userNames.add(fromName)
+            }
+            val chatTarget = m.chatId?.trim() ?: ""
+            if (chatTarget.isNotEmpty() && chatTarget != "general" && !chatTarget.contains("مدیر") && !chatTarget.contains("گوشی") && chatTarget != "host_admin") {
+                userNames.add(chatTarget)
+            }
+            val replyUser = m.replyToUser?.trim() ?: ""
+            if (replyUser.isNotEmpty() && !replyUser.contains("مدیر") && !replyUser.contains("گوشی") && replyUser != "host_admin") {
+                userNames.add(replyUser)
+            }
+        }
+
+        val rooms = mutableListOf<ChatRoomSummary>()
+        for (uname in userNames) {
+            val userMsgs = getMessagesForChat(uname)
+            val lastMsg = userMsgs.lastOrNull()
+            val lastText = lastMsg?.getDecryptedText() ?: "بدون پیام"
+            val lastTime = lastMsg?.created ?: ""
+            val unread = userMsgs.count { msg ->
+                val isHost = msg.from.contains("مدیر") || msg.from.contains("گوشی") || msg.senderId == "host_admin"
+                !isHost && msg.status != "read"
+            }
+            val isOnline = webSessions.any { it.nickname.equals(uname, ignoreCase = true) && it.status == "approved" } ||
+                           trusted.any { it.nickname.equals(uname, ignoreCase = true) && it.mode != "denied" }
+            val avatar = trusted.find { it.nickname.equals(uname, ignoreCase = true) }?.avatar ?: "🧑‍💻"
+
+            rooms.add(ChatRoomSummary(
+                username = uname,
+                lastMessage = lastText,
+                lastTimestamp = lastTime,
+                unreadCount = unread,
+                isOnline = isOnline,
+                avatar = avatar
+            ))
+        }
+
+        return rooms.sortedWith(compareByDescending<ChatRoomSummary> { it.unreadCount > 0 }.thenByDescending { it.lastTimestamp })
+    }
+
+    @Synchronized
+    fun getMessagesForChat(chatUser: String): List<Message> {
+        val cleanUser = chatUser.trim()
+        if (cleanUser.isEmpty()) return getAllMessages()
+        val all = getAllMessages()
+        return all.filter { m ->
+            val fromMatch = m.from.trim().equals(cleanUser, ignoreCase = true)
+            val chatMatch = m.chatId?.trim()?.equals(cleanUser, ignoreCase = true) == true
+            val replyMatch = m.replyToUser?.trim()?.equals(cleanUser, ignoreCase = true) == true
+            val isHost = m.from.contains("مدیر") || m.from.contains("گوشی") || m.senderId == "host_admin"
+            
+            // From this user directly
+            if (fromMatch) return@filter true
+            // Targeted to this user's room
+            if (chatMatch) return@filter true
+            // Host message targeting or replying to this user
+            if (isHost && (chatMatch || replyMatch)) return@filter true
+            // Legacy client messages where chatId was null
+            if (m.chatId.isNullOrBlank() && !isHost && fromMatch) return@filter true
+            
+            false
+        }
+    }
+
+    @Synchronized
+    fun markChatAsRead(chatUser: String) {
+        ensureMessagesLoaded()
+        val cleanUser = chatUser.trim()
         var changed = false
-        val updated = messages.map {
-            if ((it.from.contains("مدیر") || it.from.contains("گوشی") || it.senderId == "host_admin") && 
-                (it.status == "delivered" || it.status == "pending")) {
+        for (i in inMemoryMessages.indices) {
+            val m = inMemoryMessages[i]
+            val isFromUser = m.from.equals(cleanUser, ignoreCase = true)
+            val isChatTarget = m.chatId?.equals(cleanUser, ignoreCase = true) == true
+            if ((isFromUser || isChatTarget) && m.status != "read") {
                 changed = true
-                it.copy(status = "read")
-            } else {
-                it
+                inMemoryMessages[i] = m.copy(status = "read")
             }
         }
         if (changed) {
-            rewriteMessagesFile(updated)
+            rewriteMessagesFile(inMemoryMessages)
+        }
+    }
+
+    @Synchronized
+    fun deleteChatRoom(chatUser: String): Boolean {
+        ensureMessagesLoaded()
+        val cleanUser = chatUser.trim()
+        val removed = inMemoryMessages.removeAll { m ->
+            val isFromUser = m.from.equals(cleanUser, ignoreCase = true)
+            val isChatTarget = m.chatId?.equals(cleanUser, ignoreCase = true) == true
+            val isHost = m.from.contains("مدیر") || m.from.contains("گوشی") || m.senderId == "host_admin"
+            val isHostToUser = isHost && (m.chatId?.equals(cleanUser, ignoreCase = true) == true || m.replyToUser?.equals(cleanUser, ignoreCase = true) == true)
+            isFromUser || isChatTarget || isHostToUser
+        }
+        if (removed) {
+            rewriteMessagesFile(inMemoryMessages)
+        }
+        return removed
+    }
+
+    @Synchronized
+    fun markHostMessagesAsRead(forUser: String? = null) {
+        ensureMessagesLoaded()
+        var changed = false
+        for (i in inMemoryMessages.indices) {
+            val it = inMemoryMessages[i]
+            val matchesUser = forUser == null || it.chatId.equals(forUser, ignoreCase = true) || it.replyToUser.equals(forUser, ignoreCase = true)
+            if (matchesUser && (it.from.contains("مدیر") || it.from.contains("گوشی") || it.senderId == "host_admin") && 
+                (it.status == "delivered" || it.status == "pending")) {
+                changed = true
+                inMemoryMessages[i] = it.copy(status = "read")
+            }
+        }
+        if (changed) {
+            rewriteMessagesFile(inMemoryMessages)
         }
     }
 
     @Synchronized
     fun syncAndMergeMessages(clientMsgs: List<Message>): List<Message> {
-        val localMsgs = getAllMessages().toMutableList()
-        val localIds = localMsgs.map { it.id }.toSet()
+        ensureMessagesLoaded()
+        val localIds = inMemoryMessages.map { it.id }.toSet()
         var changed = false
         
         for (m in clientMsgs) {
             if (!localIds.contains(m.id)) {
                 val decrypted = m.getDecryptedText()
                 if (!decrypted.startsWith("📎 فایل:") && !decrypted.contains("📎 فایل")) {
-                    localMsgs.add(m)
+                    inMemoryMessages.add(m)
                     changed = true
                 }
             }
         }
         
         if (changed) {
-            localMsgs.sortBy { it.id }
-            rewriteMessagesFile(localMsgs)
+            inMemoryMessages.sortBy { it.id }
+            rewriteMessagesFile(inMemoryMessages)
         }
-        return localMsgs
+        return inMemoryMessages
     }
 
     private fun triggerMessageNotification(sender: String, messageText: String) {
@@ -685,44 +840,45 @@ class FileShareRepository(private val context: Context) {
 
     @Synchronized
     fun editMessage(id: Long, from: String, text: String): Message? {
-        val all = getAllMessages().toMutableList()
-        val index = all.indexOfFirst { it.id == id }
+        ensureMessagesLoaded()
+        val index = inMemoryMessages.indexOfFirst { it.id == id }
         if (index == -1) return null
 
-        val original = all[index]
+        val original = inMemoryMessages[index]
         val updated = original.copy(
             from = from,
             text = text,
             edited = getCurrentIso8601()
         )
-        all[index] = updated
-
-        rewriteMessagesFile(all)
+        inMemoryMessages[index] = updated
+        rewriteMessagesFile(inMemoryMessages)
         return updated
     }
 
     @Synchronized
     fun deleteMessage(id: Long): Boolean {
-        val all = getAllMessages().toMutableList()
-        val removed = all.removeAll { it.id == id }
+        ensureMessagesLoaded()
+        val removed = inMemoryMessages.removeAll { it.id == id }
         if (removed) {
-            rewriteMessagesFile(all)
+            rewriteMessagesFile(inMemoryMessages)
         }
         return removed
     }
 
     @Synchronized
     fun deleteMessages(ids: List<Long>): Boolean {
-        val all = getAllMessages().toMutableList()
-        val removed = all.removeAll { it.id in ids }
+        ensureMessagesLoaded()
+        val removed = inMemoryMessages.removeAll { it.id in ids }
         if (removed) {
-            rewriteMessagesFile(all)
+            rewriteMessagesFile(inMemoryMessages)
         }
         return removed
     }
 
     @Synchronized
     fun deleteAllMessages() {
+        ensureMessagesLoaded()
+        inMemoryMessages.clear()
         rewriteMessagesFile(emptyList())
     }
 
