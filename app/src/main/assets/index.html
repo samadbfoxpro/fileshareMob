@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FileShare - انتقال فایل و پیام</title>
+  <link rel="icon" href="/icon.ico" sizes="any">
+  <link rel="shortcut icon" href="/icon.ico">
+  <style>
+    :root{--bg:#0a0c10;--bg2:#10131a;--bg3:#161b26;--border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);--text:#e8eaf0;--text2:#8891a6;--text3:#5a6275;--accent:#4f9cf9;--accent2:#7b5ffc;--ag:rgba(79,156,249,.18);--a2g:rgba(123,95,252,.15);--red:#ff5e7e;--green:#4ade80;--shs:0 4px 20px rgba(0,0,0,.35);--r:14px;--rs:8px;--tr:.3s cubic-bezier(.4,0,.2,1)}
+    [data-theme="light"]{--bg:#f0f2f7;--bg2:#fff;--bg3:#f7f8fc;--border:rgba(0,0,0,.08);--border2:rgba(0,0,0,.13);--text:#111827;--text2:#5a6275;--text3:#9099aa;--accent:#1769d2;--accent2:#6040cc;--ag:rgba(23,105,210,.12);--a2g:rgba(96,64,204,.10);--shs:0 4px 20px rgba(0,0,0,.08)}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Segoe UI',Tahoma,Arial,sans-serif;line-height:1.7;transition:background var(--tr),color var(--tr);overflow-x:hidden}
+    body::before{content:'';position:fixed;top:-220px;left:-180px;width:640px;height:640px;background:radial-gradient(circle,var(--a2g),transparent 68%);pointer-events:none}
+    body::after{content:'';position:fixed;bottom:-220px;right:-180px;width:560px;height:560px;background:radial-gradient(circle,var(--ag),transparent 68%);pointer-events:none}
+
+    /* ===== HEADER ===== */
+    header{position:sticky;top:0;z-index:100;background:rgba(10,12,16,.82);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+    [data-theme="light"] header{background:rgba(240,242,247,.88)}
+    .hi{max-width:860px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .logo{display:flex;align-items:center;gap:10px}
+    .li{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,var(--accent2),var(--accent));font-size:17px;box-shadow:0 0 18px var(--ag);overflow:hidden}
+    .li img{width:100%;height:100%;object-fit:contain;display:block}
+    .lt{font-weight:800;font-size:15px}.ls{font-size:10px;color:var(--text2);display:block;line-height:1.2}
+
+    /* ===== NETWORK PILL IN HEADER ===== */
+    .netPill{position:relative;display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:5px 12px 5px 8px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text2);transition:all var(--tr);white-space:nowrap;user-select:none}
+    .netPill:hover{border-color:var(--accent);color:var(--accent);background:var(--ag)}
+    .netPillDot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);flex-shrink:0;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .netPillCount{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;border-radius:999px;padding:1px 7px;font-size:10px;font-weight:800;margin-right:2px}
+    .netPillArrow{font-size:10px;transition:transform var(--tr);margin-right:2px}
+    .netPill.open .netPillArrow{transform:rotate(180deg)}
+    .netDropdown{position:absolute;top:calc(100% + 8px);right:0;min-width:240px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);box-shadow:0 16px 40px rgba(0,0,0,.45);padding:10px;z-index:200;display:none;animation:dropIn .2s ease both}
+    @keyframes dropIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+    .netPill.open .netDropdown{display:grid;gap:6px}
+    .netDItem{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:9px 11px}
+    .netDUrl{direction:ltr;text-align:left;font:700 12px Consolas,monospace;color:var(--text);overflow-wrap:anywhere;flex:1}
+    .netDIp{display:block;font-size:10px;color:var(--text3);direction:ltr;text-align:left;margin-top:1px}
+    .netCopyBtn{background:var(--bg2);border:1px solid var(--border2);color:var(--accent);border-radius:6px;padding:4px 10px;font:700 11px 'Vazirmatn',sans-serif;cursor:pointer;white-space:nowrap;transition:all .2s;flex-shrink:0}
+    .netCopyBtn:hover{background:var(--ag);border-color:var(--accent)}
+    .netEmpty{color:var(--text2);font-size:12px;padding:6px 4px}
+
+    /* ===== HEADER RIGHT CONTROLS ===== */
+    .hControls{display:flex;align-items:center;gap:8px}
+    .tb{width:46px;height:24px;border-radius:50px;background:var(--bg3);border:1px solid var(--border2);cursor:pointer;position:relative;flex-shrink:0}
+    .tb::before{content:'';position:absolute;top:3px;right:3px;width:16px;height:16px;border-radius:50%;background:#f6c90e;transition:transform var(--tr),background var(--tr)}
+    [data-theme="light"] .tb::before{transform:translateX(-22px);background:var(--accent)}
+
+    /* ===== HEADER TABS (guide) ===== */
+    .hTabs{display:flex;align-items:center;gap:2px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);padding:3px}
+    .hTabBtn{border:none;border-radius:6px;background:transparent;color:var(--text2);padding:5px 12px;font:700 12px 'Vazirmatn',sans-serif;cursor:pointer;transition:all var(--tr);white-space:nowrap}
+    .hTabBtn:hover{color:var(--text);background:var(--bg2)}
+    .hTabBtn.active{color:#fff;background:linear-gradient(135deg,var(--accent2),var(--accent))}
+    .tabIcon{width:18px;height:18px;object-fit:contain;vertical-align:-4px;margin-left:6px}
+    .hTabBtn .tabIcon{width:15px;height:15px;vertical-align:-3px;margin-left:4px}
+
+    /* ===== MAIN ===== */
+    main{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:28px 20px 60px;display:grid;gap:18px}
+    .hero{text-align:center;padding:4px 0 0;animation:fu .6s ease both}.hero h1{font-size:clamp(22px,5vw,32px);font-weight:900;line-height:1.25;background:linear-gradient(135deg,var(--text) 40%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
+    .hero p{color:var(--text2);font-size:14px;max-width:500px;margin:0 auto}
+
+    /* ===== SECTION TABS ===== */
+    .tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:8px;box-shadow:var(--shs);position:sticky;top:68px;z-index:80}
+    .tabBtn{border:1px solid transparent;border-radius:var(--rs);background:transparent;color:var(--text2);min-height:42px;font:800 14px 'Vazirmatn',Tahoma,Arial,sans-serif;cursor:pointer;transition:background var(--tr),color var(--tr),border-color var(--tr)}
+    .tabBtn:hover{color:var(--text);background:var(--bg3)}.tabBtn.active{color:#fff;background:linear-gradient(135deg,var(--accent2),var(--accent));box-shadow:0 4px 18px var(--ag)}
+    .tabPanel{display:none;gap:18px}.tabPanel.active{display:grid}
+
+    /* ===== CARD ===== */
+    .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:var(--shs);animation:fu .45s ease both}
+    .ch{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+    .ci{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px}.ci.b{background:var(--ag)}.ci.p{background:var(--a2g)}
+    .card h2{font-size:16px;font-weight:800}
+
+    /* ===== UPLOAD ===== */
+    .uz{border:1.5px dashed var(--border2);border-radius:var(--rs);padding:26px 20px;text-align:center;cursor:pointer;position:relative;background:var(--bg3);margin-bottom:14px;transition:border-color var(--tr),background var(--tr)}
+    .uz:hover{border-color:var(--accent);background:var(--ag)}.uz input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}.uzi{font-size:26px;display:block;margin-bottom:8px}.uzt{font-size:14px;color:var(--text2);font-weight:500}.uzs{margin-top:8px;font-size:13px;color:var(--accent);font-weight:700;min-height:18px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;border:0;border-radius:var(--rs);padding:9px 18px;font:700 13px 'Vazirmatn',Tahoma,Arial,sans-serif;cursor:pointer;text-decoration:none;transition:all var(--tr)}
+    .bp{width:100%;background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;box-shadow:0 4px 20px var(--ag)}.bp:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08)}.bp:disabled{opacity:.5;cursor:not-allowed}
+    .bd{background:var(--bg3);color:var(--accent);border:1px solid var(--border2);font-size:12px;padding:7px 13px;min-height:34px;white-space:nowrap}.bd:hover{background:var(--ag);border-color:var(--accent);transform:translateY(-1px)}.br{background:rgba(255,94,126,.08);color:var(--red);border-color:rgba(255,94,126,.22)}
+    .pw{margin:10px 0 4px}.pbb{width:100%;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)}.pbf{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent2),var(--accent));width:0%;transition:width .2s ease}.pl{font-size:12px;color:var(--text3);margin-top:4px;display:flex;justify-content:space-between}#message.ok{color:var(--green)}#message.err{color:var(--red)}
+
+    /* ===== FILE LIST ===== */
+    .fl{display:grid;gap:10px}
+    .fr{border:1px solid var(--border);border-radius:var(--rs);background:var(--bg3);transition:border-color var(--tr),transform .2s ease;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;padding:12px 14px}.fr:hover{border-color:var(--border2);transform:translateY(-1px)}.fn{font-weight:800;font-size:14px;overflow-wrap:anywhere}.fm{font-size:12px;color:var(--text3);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap}
+    .fa{display:flex;gap:8px;flex-wrap:wrap}
+    .es{text-align:center;padding:34px 20px;color:var(--text3);font-size:14px}.esi{font-size:32px;display:block;margin-bottom:10px;opacity:.4}
+
+    /* ===== MESSAGE SECTION ===== */
+    .remoteBox,.fl{display:grid;gap:10px}.remoteTop{display:flex;gap:10px;align-items:center}.remoteTop input{flex:1;min-width:0}
+    .textInput{width:100%;border:1px solid var(--border2);border-radius:var(--rs);background:var(--bg3);color:var(--text);font:500 14px 'Vazirmatn',Tahoma,Arial,sans-serif;padding:10px 12px;outline:none}.textInput:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ag)}
+    textarea.textInput{min-height:160px;resize:vertical;direction:auto;line-height:1.85}
+    .remoteActions{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center}.remoteHint{font-size:12px;color:var(--text3);min-height:18px}
+
+    /* ===== BULK BAR (selection mode) ===== */
+    .bulkBar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid var(--border);border-radius:var(--rs);background:var(--bg3);padding:10px 14px;transition:all var(--tr)}
+    .bulkLeft{display:flex;align-items:center;gap:10px}
+    .selLabel{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--text2);user-select:none}
+    .selCount{font-size:11px;color:var(--text3);font-weight:600;min-width:60px}
+
+    /* ===== CUSTOM CHECKBOX ===== */
+    .customCb{position:relative;width:20px;height:20px;flex-shrink:0}
+    .customCb input{position:absolute;opacity:0;width:0;height:0}
+    .cbBox{width:20px;height:20px;border-radius:6px;border:2px solid var(--border2);background:var(--bg2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;position:relative}
+    .customCb input:checked ~ .cbBox{background:linear-gradient(135deg,var(--accent2),var(--accent));border-color:transparent;box-shadow:0 2px 10px var(--ag)}
+    .customCb input:indeterminate ~ .cbBox{background:var(--ag);border-color:var(--accent)}
+    .cbBox::after{content:'';width:5px;height:9px;border:2px solid #fff;border-top:none;border-left:none;transform:rotate(45deg) scale(0) translateY(-1px);transition:transform .15s;display:block}
+    .customCb input:checked ~ .cbBox::after{transform:rotate(45deg) scale(1) translateY(-1px)}
+    .cbBox .cbDash{display:none;width:10px;height:2px;background:#fff;border-radius:2px}
+    .customCb input:indeterminate ~ .cbBox .cbDash{display:block}
+    .customCb input:indeterminate ~ .cbBox::after{display:none}
+
+    /* ===== MESSAGE LIST ===== */
+    .messageList{display:grid;gap:8px;max-height:460px;overflow:auto;padding-inline-end:2px}
+    .msgRow{border:1.5px solid var(--border);border-radius:var(--rs);background:var(--bg3);transition:border-color var(--tr),background var(--tr),transform .15s ease;padding:12px;display:grid;grid-template-columns:auto 1fr;gap:10px;cursor:default}
+    .msgRow.selectMode{cursor:pointer}
+    .msgRow.selectMode:hover{border-color:var(--border2);background:rgba(79,156,249,.05);transform:translateY(-1px)}
+    .msgRow.selected{border-color:var(--accent)!important;background:var(--ag)!important}
+    .msgCheckArea{display:flex;align-items:flex-start;padding-top:2px}
+    .msgCbWrap{width:18px;height:18px;flex-shrink:0;position:relative}
+    .msgCbWrap input{position:absolute;opacity:0;width:0;height:0}
+    .msgCbBox{width:18px;height:18px;border-radius:5px;border:2px solid var(--border2);background:var(--bg2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
+    .msgCbWrap input:checked ~ .msgCbBox{background:linear-gradient(135deg,var(--accent2),var(--accent));border-color:transparent;box-shadow:0 1px 8px var(--ag)}
+    .msgCbBox::after{content:'';width:4px;height:8px;border:2px solid #fff;border-top:none;border-left:none;transform:rotate(45deg) scale(0) translateY(-1px);transition:transform .15s;display:block}
+    .msgCbWrap input:checked ~ .msgCbBox::after{transform:rotate(45deg) scale(1) translateY(-1px)}
+    .msgBody{display:grid;gap:7px;min-width:0}
+    .msgMeta{display:flex;justify-content:space-between;gap:10px;color:var(--text3);font-size:11px}
+    .msgFrom{font-weight:700;color:var(--text2)}
+    .msgText{white-space:pre-wrap;overflow-wrap:anywhere;direction:auto;color:var(--text);font-size:14px;line-height:1.85}
+    .editArea{min-height:110px}.msgBtns{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+
+    /* ===== GUIDE PANEL ===== */
+    .guidePanel{display:none;gap:20px}.guidePanel.active{display:grid}
+    .guideSec{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:var(--shs);animation:fu .4s ease both}
+    .guideSec h3{font-size:15px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+    .guideStep{display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:start;margin-bottom:12px}
+    .guideStep:last-child{margin-bottom:0}
+    .gsNum{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+    .gsText{font-size:13px;color:var(--text2);line-height:1.8}
+    .gsText strong{color:var(--text);font-weight:700}
+    .guideBadge{display:inline-block;background:var(--ag);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;margin:1px 2px}
+    .guideTip{background:linear-gradient(135deg,rgba(79,156,249,.08),rgba(123,95,252,.06));border:1px solid var(--border2);border-radius:var(--rs);padding:12px 14px;font-size:12px;color:var(--text2);line-height:1.8;margin-top:6px}
+    .guideTip b{color:var(--text)}
+
+    footer{position:relative;z-index:1;text-align:center;padding:0 20px 40px;font-size:12px;color:var(--text3)}
+    @keyframes fu{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    @media(max-width:600px){
+      main{padding-top:20px}.tabs{top:62px}.card,.guideSec{padding:16px}
+      .fr,.netItem{grid-template-columns:1fr}.fa{justify-content:stretch}.bd{width:100%}
+      .remoteTop,.remoteActions{grid-template-columns:1fr;display:grid}.remoteActions .bd{width:100%}
+      .bulkBar{display:grid}.msgBtns{justify-content:stretch}
+      .hTabs{display:none}
+    }
+
+    /* ===== APPROVAL OVERLAY ===== */
+    .approval-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(18, 27, 34, 0.95);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+    .approval-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .approval-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 34px 24px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+      animation: fu 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .approval-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .approval-card h2 {
+      font-size: 18px;
+      font-weight: 900;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+    .approval-card p {
+      font-size: 14px;
+      color: var(--text2);
+      line-height: 1.6;
+    }
+    .approval-hint {
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text3);
+      background: var(--bg3);
+      padding: 10px 14px;
+      border-radius: var(--rs);
+      border: 1px solid var(--border2);
+    }
+    .approval-loader {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin: 20px 0;
+    }
+    .approval-loader .dot {
+      width: 10px;
+      height: 10px;
+      background-color: var(--accent);
+      border-radius: 50%;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+    .approval-loader .dot:nth-child(1) { animation-delay: -0.32s; }
+    .approval-loader .dot:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1.0); }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(0.95); }
+    }
+    .animate-pulse {
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    /* ===== REPLY MESSAGE STYLE ===== */
+    .msgReplyBox {
+      background: rgba(255, 255, 255, 0.05);
+      border-right: 4px solid var(--accent);
+      padding: 6px 12px;
+      margin-bottom: 8px;
+      border-radius: var(--rs);
+      font-size: 12px;
+      border: 1px solid var(--border);
+    }
+    .msgReplyUser {
+      font-weight: bold;
+      color: var(--accent);
+      margin-bottom: 3px;
+      text-align: right;
+    }
+    .msgReplyText {
+      color: var(--text2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      text-align: right;
+    }
+
+    /* ===== ACTIVE REPLY PREVIEW ABOVE INPUT ===== */
+    .replyPreview {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg3);
+      border-right: 4px solid var(--accent);
+      border-left: 1px solid var(--border);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      border-radius: var(--rs);
+      margin-bottom: 8px;
+      direction: rtl;
+    }
+    .replyPreviewInfo {
+      min-width: 0;
+      flex: 1;
+      text-align: right;
+    }
+    .replyPreviewUser {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+    .replyPreviewText {
+      font-size: 12px;
+      color: var(--text2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .replyPreviewCancel {
+      background: none;
+      border: none;
+      color: var(--text3);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+    .replyPreviewCancel:hover {
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="hi">
+    <div class="logo">
+      <div class="li"><img src="/icon.ico" alt="FileShare Logo"></div>
+      <div><span class="lt">FileShare v1.0.0</span><span class="ls">انتقال فایل و پیام در شبکه محلی</span></div>
+    </div>
+    <div class="hControls">
+      <!-- Network pill with dropdown -->
+      <div class="netPill" id="netPill" tabindex="0" title="آدرس‌های شبکه">
+        <span class="netPillDot"></span>
+        <span id="netPillText">شبکه</span>
+        <span class="netPillCount" id="netPillCount" style="display:none"></span>
+        <span class="netPillArrow">▾</span>
+        <div class="netDropdown" id="netDropdown">
+          <div class="netEmpty" id="netDropContent">در حال بارگذاری...</div>
+        </div>
+      </div>
+      <!-- Guide tab -->
+      <div class="hTabs">
+        <button class="hTabBtn" id="headerGuideBtn" type="button"><img class="tabIcon" src="/icon.ico" alt="">راهنما</button>
+      </div>
+      <button class="tb" id="themeBtn" title="تغییر تم" aria-label="تغییر تم"></button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="hero"><h1>اشتراک‌گذاری فایل و پیام</h1><p>از بخش زیر برای انتقال فایل و چت بین دستگاه‌ها در شبکه محلی استفاده کنید.</p></div>
+
+  <!-- SECTION TABS -->
+  <div class="tabs">
+    <button class="tabBtn active" id="filesTabBtn" type="button">📁 فایل‌ها</button>
+    <button class="tabBtn" id="chatTabBtn" type="button">💬 گفتگوی متنی</button>
+    <button class="tabBtn" id="guideTabBtn" type="button">📘 راهنما</button>
+  </div>
+
+  <!-- FILES PANEL -->
+  <section class="tabPanel active" id="filesPanel" role="tabpanel">
+    <div class="card">
+      <div class="ch"><div class="ci b">⬆</div><h2>آپلود فایل</h2></div>
+      <div class="uz" id="dropZone"><input id="fileInput" type="file" multiple style="display:none;"><input id="folderInput" type="file" webkitdirectory directory multiple style="display:none;"><span class="uzi">📂</span><div class="uzt">فایل‌ها/پوشه‌ها را اینجا بکشید یا دکمه‌های زیر را کلیک کنید</div><div style="margin-top: 15px; position: relative; z-index: 10;"><button class="btn bp" type="button" onclick="document.getElementById('fileInput').click()">انتخاب فایل(ها)</button> <button class="btn bd" type="button" onclick="document.getElementById('folderInput').click()">انتخاب پوشه</button></div><div class="uzs" id="selectedName"></div></div>
+      <button class="btn bp" id="uploadBtn" disabled>آپلود فایل</button>
+      <div class="pw"><div class="pbb"><div class="pbf" id="progressFill"></div></div><div class="pl"><span id="message">فایل را انتخاب کن و آپلود بزن.</span><span id="progressPct"></span></div></div>
+    </div>
+    <div class="card">
+      <div class="ch" style="justify-content: space-between;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="ci p">📋</div><h2>فایل‌های موجود</h2>
+        </div>
+        <button class="btn bd" type="button" onclick="loadFiles()" style="padding: 4px 10px; font-size: 12px;">↻ تازه‌سازی</button>
+      </div>
+      <div id="fileList" class="fl"><div class="es"><span class="esi">📭</span>در حال بارگذاری...</div></div>
+    </div>
+  </section>
+
+  <!-- CHAT PANEL -->
+  <section class="tabPanel" id="chatPanel" role="tabpanel">
+    <!-- Chat settings/nickname card -->
+    <div class="card">
+      <div class="ch"><div class="ci p">🧑‍💻</div><h2>تنظیمات چت</h2></div>
+      <div class="remoteTop">
+        <input class="textInput" id="nicknameInput" type="text" placeholder="نام کاربری شما (مثلاً گوشی رضا)">
+      </div>
+    </div>
+
+    <!-- Active Chat messages list card -->
+    <div class="card">
+      <div class="ch"><div class="ci b">💬</div><h2>گفتگو با دستگاه‌ها</h2></div>
+
+      <div class="messageList" id="chatMessageList">
+        <div class="es"><span class="esi">💬</span>در حال بارگذاری پیام‌ها...</div>
+      </div>
+      
+      <!-- Chat message input card area -->
+      <div style="margin-top: 18px; display: grid; gap: 10px;">
+        <!-- Reply Preview Area -->
+        <div id="replyPreview" class="replyPreview">
+          <div class="replyPreviewInfo">
+            <div id="replyPreviewUser" class="replyPreviewUser">پاسخ به</div>
+            <div id="replyPreviewText" class="replyPreviewText"></div>
+          </div>
+          <button id="replyPreviewCancel" class="replyPreviewCancel" type="button" title="لغو پاسخ">❌</button>
+        </div>
+
+        <textarea class="textInput" id="chatInput" placeholder="پیام خود را اینجا بنویسید..." rows="3" style="min-height: 80px;"></textarea>
+        <div class="remoteActions">
+          <span class="remoteHint" id="chatHint"></span>
+          <button class="btn bp" id="sendChatBtn" style="width: auto; padding: 10px 24px;">ارسال پیام</button>
+          <button class="btn bd" id="downloadChatBtn" title="دانلود کل گفتگو" type="button">⬇ دانلود</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GUIDE PANEL -->
+  <section class="tabPanel" id="guidePanel" role="tabpanel">
+    <div class="guideSec">
+      <h3>📡 اتصال دستگاه‌های دیگر</h3>
+      <div class="guideStep">
+        <div class="gsNum">۱</div>
+        <div class="gsText">مطمئن شو که سیستم و گوشی‌ات <strong>هر دو به یک Wi-Fi یا شبکه محلی</strong> وصل هستند.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۲</div>
+        <div class="gsText">روی <strong class="guideBadge">🌐 شبکه</strong> در بالای صفحه کلیک کن تا آدرس‌های قابل استفاده نشان داده شوند.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۳</div>
+        <div class="gsText">آدرس را <strong>کپی</strong> کرده و در مرورگر گوشی یا دستگاه دیگر باز کن. همین صفحه برایت نمایش داده می‌شود.</div>
+      </div>
+      <div class="guideTip">💡 <b>نکته:</b> اگر آدرسی نشان داده نشد، اتصال به شبکه را بررسی کن.</div>
+    </div>
+
+    <div class="guideSec">
+      <h3>📁 آپلود و دانلود فایل</h3>
+      <div class="guideStep">
+        <div class="gsNum">۱</div>
+        <div class="gsText">به تب <strong class="guideBadge">📁 فایل‌ها</strong> برو و روی ناحیه آپلود کلیک کن یا فایل را <strong>درگ اند دراپ</strong> کن.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۲</div>
+        <div class="gsText">بعد از انتخاب فایل، دکمه <strong>آپلود فایل</strong> را بزن. نوار پیشرفت نشان می‌دهد چه مقدار آپلود شده.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۳</div>
+        <div class="gsText">از هر دستگاه دیگری می‌توانی فایل را با دکمه <strong>دانلود</strong> دریافت کنی. برای حذف هم دکمه <strong>حذف</strong> وجود دارد.</div>
+      </div>
+      <div class="guideTip">💡 <b>نکته:</b> فایل‌های آپلودی مستقیماً در گوشی میزبان (اندروید) در پوشه <b>Downloads/FileShare</b> ذخیره می‌شوند و حجم هر فایل محدودیتی ندارد.</div>
+    </div>
+
+    <div class="guideSec">
+      <h3>🗂 پوشه اشتراکی</h3>
+      <div class="guideStep">
+        <div class="gsNum">۱</div>
+        <div class="gsText">میزبان (صاحب گوشی اندروید) می‌تواند از منوی اصلی برنامه خود روی دکمه <strong>تنظیم پوشه اشتراکی</strong> بزند و یک پوشه دلخواه را از حافظه گوشی انتخاب کند.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۲</div>
+        <div class="gsText">فایل‌های داخل آن پوشه، بدون نیاز به آپلود دوباره، در بخش کلاینت تحت وب با برچسب <strong class="guideBadge">اشتراکی</strong> نمایش داده می‌شوند.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۳</div>
+        <div class="gsText">سایر دستگاه‌های متصل می‌توانند این فایل‌ها را به راحتی دانلود کنند. دکمه حذف برای فایل‌های اشتراکی غیرفعال است تا از پاک شدن تصادفی فایل‌های اصلی گوشی میزبان جلوگیری شود.</div>
+      </div>
+      <div class="guideTip">💡 <b>نکته:</b> میزبان هر زمان که بخواهد می‌تواند دسترسی به پوشه اشتراکی را لغو کند یا تغییر دهد.</div>
+    </div>
+
+    <div class="guideSec">
+      <h3>💬 تبادل پیام بین دستگاه‌ها</h3>
+      <div class="guideStep">
+        <div class="gsNum">۱</div>
+        <div class="gsText">به تب <strong class="guideBadge">💬 تبادل پیام</strong> برو. می‌توانی یک <strong>نام برای دستگاه</strong> وارد کنی تا مشخص باشد پیام از کجا آمده.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۲</div>
+        <div class="gsText">متن خود را در کادر بنویس و <strong>ارسال پیام</strong> را بزن. پیام‌ها به صورت خودکار هر ۱.۵ ثانیه <strong>برای همه دستگاه‌ها</strong> همگام‌سازی می‌شوند.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۳</div>
+        <div class="gsText">برای <strong>انتخاب چند پیام</strong> یکجا، حالت انتخاب را با تیک زدن هر پیام فعال کن. سپس می‌توانی روی کل کارت پیام کلیک کنی تا انتخاب/رد شود.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۴</div>
+        <div class="gsText">هر پیام دکمه‌های <strong>کپی، ویرایش و حذف</strong> دارد. با <strong>⬇ دانلود</strong> می‌توانی همه پیام‌ها را به صورت فایل متنی ذخیره کنی.</div>
+      </div>
+      <div class="guideTip">💡 <b>کاربرد اصلی:</b> متن را روی سیستم تایپ کن → ارسال کن → از گوشی کپی کن. یا برعکس. بدون نیاز به بلوتوث یا کابل!</div>
+    </div>
+
+    <div class="guideSec">
+      <h3>🌙 تنظیمات و سایر امکانات</h3>
+      <div class="guideStep">
+        <div class="gsNum">۱</div>
+        <div class="gsText">با دکمه <strong>🌙/☀ تم</strong> در بالا می‌توانی بین حالت تاریک و روشن جابجا شوی. تنظیم ذخیره می‌شود.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۲</div>
+        <div class="gsText">با کلیک روی <strong class="guideBadge">🌐 شبکه</strong> در هدر، لیست IP‌های موجود را ببین و کپی کنی. اگر چند IP وجود داشت، معمولاً اولی درست است.</div>
+      </div>
+      <div class="guideStep">
+        <div class="gsNum">۳</div>
+        <div class="gsText">برنامه روی پورت <strong>8886</strong> اجرا می‌شود. اگر پورت اشغال بود، در خروجی ترمینال پیام می‌بینی.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Approval Overlay Modal -->
+<div id="approvalOverlay" class="approval-overlay">
+  <div class="approval-card">
+    <div class="approval-icon animate-pulse">📡</div>
+    <h2>درخواست اتصال به FileShare</h2>
+    <p id="approvalStatusText">در حال ارسال درخواست اتصال به مدیر شبکه...</p>
+    
+    <!-- User nickname input (first time only) -->
+    <div id="approvalNameSection" style="margin: 15px 0;">
+      <p style="font-size: 12px; color: var(--text3); margin-bottom: 8px;">یک نام برای دستگاه خود انتخاب کنید تا برای مدیر نمایش داده شود:</p>
+      <input class="textInput" id="webUserNickname" type="text" placeholder="نام شما (مثلا: مرورگر سیستم رضا)" style="text-align: center; font-weight: bold;">
+      <button class="btn bp" id="requestAccessBtn" style="margin-top: 12px;">ارسال درخواست تایید</button>
+    </div>
+
+    <!-- Loading spinner / dots -->
+    <div id="approvalLoader" class="approval-loader" style="display: none;">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+    <div class="approval-hint">
+      پس از تایید توسط مدیر برنامه در گوشی/تبلت، صفحه برای شما باز خواهد شد.
+    </div>
+  </div>
+</div>
+
+<footer>ساخته شده برای شبکه‌های محلی — FileShare</footer>
+
+<script>
+  // Memory-based session ID (cleared upon tab close/refresh as requested)
+  const webSessionId = 'web-session-' + Math.random().toString(36).substring(2, 15);
+  let sessionNickname = localStorage.getItem('webNickname') || '';
+  let approvalInterval = null;
+  let chatInterval = null;
+
+  // Theme
+  const html=document.documentElement,themeBtn=document.getElementById('themeBtn'),saved=localStorage.getItem('theme')||'dark';
+  html.setAttribute('data-theme',saved);
+  themeBtn.addEventListener('click',()=>{const next=html.getAttribute('data-theme')==='dark'?'light':'dark';html.setAttribute('data-theme',next);localStorage.setItem('theme',next)});
+
+  // Tabs Navigation Setup
+  const filesTabBtn = document.getElementById('filesTabBtn');
+  const chatTabBtn = document.getElementById('chatTabBtn');
+  const guideTabBtn = document.getElementById('guideTabBtn');
+  const headerGuideBtn = document.getElementById('headerGuideBtn');
+  
+  const filesPanel = document.getElementById('filesPanel');
+  const chatPanel = document.getElementById('chatPanel');
+  const guidePanel = document.getElementById('guidePanel');
+
+  function switchTab(tab) {
+    filesTabBtn.classList.remove('active');
+    chatTabBtn.classList.remove('active');
+    guideTabBtn.classList.remove('active');
+    
+    filesPanel.classList.remove('active');
+    chatPanel.classList.remove('active');
+    guidePanel.classList.remove('active');
+
+    if (tab === 'files') {
+      filesTabBtn.classList.add('active');
+      filesPanel.classList.add('active');
+    } else if (tab === 'chat') {
+      chatTabBtn.classList.add('active');
+      chatPanel.classList.add('active');
+      loadMessages();
+    } else if (tab === 'guide') {
+      guideTabBtn.classList.add('active');
+      guidePanel.classList.add('active');
+    }
+  }
+
+  filesTabBtn.addEventListener('click', () => switchTab('files'));
+  chatTabBtn.addEventListener('click', () => switchTab('chat'));
+  guideTabBtn.addEventListener('click', () => switchTab('guide'));
+  if (headerGuideBtn) {
+    headerGuideBtn.addEventListener('click', () => switchTab('guide'));
+  }
+
+  // ===== NETWORK PILL =====
+  const netPill=document.getElementById('netPill'),netDropContent=document.getElementById('netDropContent'),netPillText=document.getElementById('netPillText'),netPillCount=document.getElementById('netPillCount');
+  netPill.addEventListener('click',e=>{e.stopPropagation();netPill.classList.toggle('open')});
+  document.addEventListener('click',()=>netPill.classList.remove('open'));
+  netPill.querySelector('.netDropdown').addEventListener('click',e=>e.stopPropagation());
+
+  async function copyText(text){if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);return}const temp=document.createElement('textarea');temp.value=text;temp.style.position='fixed';temp.style.opacity='0';document.body.appendChild(temp);temp.select();document.execCommand('copy');temp.remove()}
+
+  function renderNetworkPill(data){
+    const links=data.links || data.addresses || [];
+    const processedLinks = [];
+    if(data.addresses) {
+      for(const addr of data.addresses) {
+        processedLinks.push({url: addr, ip: addr.replace("http://","").split(":")[0]});
+      }
+    } else {
+      processedLinks.push(...(data.links || []));
+    }
+
+    if(!processedLinks.length){
+      netPillText.textContent='بدون شبکه';
+      netPillCount.style.display='none';
+      netDropContent.innerHTML='<div class="netEmpty">IP لوکال قابل نمایش پیدا نشد. اتصال Wi-Fi را بررسی کن.</div>';
+      return;
+    }
+    netPillText.textContent=processedLinks[0].url.replace('http://','');
+    if(processedLinks.length>1){
+      netPillCount.style.display='';
+      netPillCount.textContent=`+${processedLinks.length-1}`;
+    } else {
+      netPillCount.style.display='none';
+    }
+    netDropContent.innerHTML='';
+    netDropContent.className='';
+    const frag=document.createDocumentFragment();
+    for(const item of processedLinks){
+      const el=document.createElement('div');
+      el.className='netDItem';
+      el.innerHTML=`<div><div class="netDUrl"></div><span class="netDIp"></span></div><button class="netCopyBtn" type="button" data-copy-url="${item.url}">کپی</button>`;
+      el.querySelector('.netDUrl').textContent=item.url;
+      el.querySelector('.netDIp').textContent=item.ip;
+      frag.appendChild(el);
+    }
+    netDropContent.appendChild(frag);
+  }
+
+  document.getElementById('netDropdown').addEventListener('click',async e=>{
+    const btn=e.target.closest('[data-copy-url]');if(!btn)return;
+    await copyText(btn.dataset.copyUrl);
+    btn.textContent='✓ کپی شد';setTimeout(()=>btn.textContent='کپی',1400);
+  });
+
+  async function loadNetworkLinks(){
+    try{
+      const res=await fetch('/api/network', { headers: { 'X-Web-Session-Id': webSessionId } });
+      const data=await res.json();
+      renderNetworkPill(data);
+    } catch{
+      netPillText.textContent='خطا';
+    }
+  }
+
+  // ===== REFS =====
+  const fileInput=document.getElementById('fileInput'),folderInput=document.getElementById('folderInput'),uploadBtn=document.getElementById('uploadBtn'),selectedName=document.getElementById('selectedName'),progressFill=document.getElementById('progressFill'),progressPct=document.getElementById('progressPct'),message=document.getElementById('message'),fileList=document.getElementById('fileList'),dropZone=document.getElementById('dropZone');
+  
+  let selectedFiles = [];
+
+  function updateSelected() {
+    if(selectedFiles.length === 0) { selectedName.textContent = ''; uploadBtn.disabled = true; return; }
+    if(selectedFiles.length === 1) { selectedName.textContent = selectedFiles[0].name; }
+    else { selectedName.textContent = selectedFiles.length + ' فایل انتخاب شد'; }
+    uploadBtn.disabled = false;
+  }
+
+  fileInput.addEventListener('change', () => { selectedFiles = Array.from(fileInput.files); updateSelected(); });
+  folderInput.addEventListener('change', () => { selectedFiles = Array.from(folderInput.files); updateSelected(); });
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--accent)'; dropZone.style.background = 'var(--ag)'; });
+  dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.style.borderColor = ''; dropZone.style.background = ''; });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.style.borderColor = ''; dropZone.style.background = '';
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      selectedFiles = Array.from(e.dataTransfer.files);
+      updateSelected();
+    }
+  });
+
+  function setMsg(t,c=''){message.textContent=t;message.className=c}
+  function fmtBytes(b){if(!b)return'0 B';const u=['B','KB','MB','GB'];const i=Math.min(Math.floor(Math.log(b)/Math.log(1024)),u.length-1);return(b/Math.pow(1024,i)).toFixed(i?1:0)+' '+u[i]}
+  function fmtDate(v){return new Intl.DateTimeFormat('fa-IR',{dateStyle:'short',timeStyle:'short'}).format(new Date(v))}
+
+  // Shared-folder aware file list override
+  async function loadFiles(){
+    try{
+      const res=await fetch('/api/files', { headers: { 'X-Web-Session-Id': webSessionId } });
+      const files=await res.json();
+      if(!files.length){fileList.innerHTML='<div class="es"><span class="esi">📭</span>هنوز فایلی برای نمایش وجود ندارد.</div>';return}
+      fileList.innerHTML='';const frag=document.createDocumentFragment();
+      for(const file of files){
+        const row=document.createElement('div'),shared=file.source==='shared';
+        const dl=shared?`/download/shared/${encodeURIComponent(file.name)}?sessionId=${webSessionId}`:`/download/${encodeURIComponent(file.name)}?sessionId=${webSessionId}`;
+        row.className='fr';
+        row.innerHTML=`<div><div class="fn"></div><div class="fm"><span>💾 ${fmtBytes(file.size)}</span><span>🕐 ${fmtDate(file.modified)}</span>${shared?'<span>اشتراکی</span>':''}</div></div><div class="fa"><a class="btn bd" href="${dl}">دانلود</a>${file.canDelete?`<button class="btn bd br" type="button" data-delete="${encodeURIComponent(file.name)}">حذف</button>`:''}</div>`;
+        row.querySelector('.fn').textContent=file.name;frag.appendChild(row);
+      }
+      fileList.appendChild(frag);
+    }catch{fileList.innerHTML='<div class="es"><span class="esi">⚠</span>خواندن فایل‌ها ناموفق بود.</div>'}
+  }
+
+  fileList.addEventListener('click',async event=>{
+    const btn=event.target.closest('[data-delete]');if(!btn)return;
+    const name=decodeURIComponent(btn.dataset.delete);
+    if(!confirm(`فایل "${name}" حذف شود؟`))return;btn.disabled=true;
+    try{
+      const res=await fetch(`/api/files/${encodeURIComponent(name)}?sessionId=${webSessionId}`,{method:'DELETE'});
+      if(!res.ok)throw new Error();
+      setMsg('فایل حذف شد.','ok');
+      await loadFiles();
+    } catch{
+      btn.disabled=false;setMsg('حذف فایل انجام نشد.','err');
+    }
+  });
+
+  uploadBtn.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return;
+    uploadBtn.disabled = true;
+    
+    let successCount = 0;
+    let failCount = 0;
+    const totalFiles = selectedFiles.length;
+    
+    for (let i = 0; i < totalFiles; i++) {
+      const file = selectedFiles[i];
+      setMsg(`در حال آپلود (${i+1}/${totalFiles}): ${file.name}...`);
+      progressFill.style.width = '0%';
+      progressPct.textContent = '0%';
+      
+      const success = await new Promise((resolve) => {
+        const data = new FormData();
+        data.append('file', file);
+        // encodeURIComponent encodes spaces and special chars, but we keep slashes if we want, or just let server sanitize
+        const path = file.webkitRelativePath || file.name;
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/upload?filename=${encodeURIComponent(path)}`);
+        xhr.setRequestHeader('X-Web-Session-Id', webSessionId);
+        xhr.upload.onprogress = e => {
+          if(e.lengthComputable) {
+            const p = Math.round((e.loaded/e.total)*100);
+            progressFill.style.width = p + '%';
+            progressPct.textContent = p + '%';
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve(true);
+          else resolve(false);
+        };
+        xhr.onerror = () => resolve(false);
+        xhr.send(data);
+      });
+      
+      if (success) successCount++;
+      else failCount++;
+    }
+    
+    uploadBtn.disabled = false;
+    fileInput.value = '';
+    folderInput.value = '';
+    selectedFiles = [];
+    selectedName.textContent = '';
+    progressFill.style.width = '100%';
+    progressPct.textContent = '100%';
+    
+    if (failCount === 0) {
+      setMsg(`آپلود ${successCount} فایل با موفقیت انجام شد.`, 'ok');
+    } else {
+      setMsg(`آپلود انجام شد: ${successCount} موفق، ${failCount} ناموفق.`, failCount > 0 ? 'err' : 'ok');
+    }
+    await loadFiles();
+    setTimeout(() => { progressFill.style.width = '0%'; progressPct.textContent = ''; }, 2500);
+  });
+
+  // ===== WEB SESSION APPROVAL FLOW =====
+  const approvalOverlay = document.getElementById('approvalOverlay');
+  const approvalStatusText = document.getElementById('approvalStatusText');
+  const approvalNameSection = document.getElementById('approvalNameSection');
+  const approvalLoader = document.getElementById('approvalLoader');
+  const webUserNicknameInput = document.getElementById('webUserNickname');
+  const requestAccessBtn = document.getElementById('requestAccessBtn');
+
+  if (sessionNickname) {
+    webUserNicknameInput.value = sessionNickname;
+  }
+
+  requestAccessBtn.addEventListener('click', () => {
+    const nick = webUserNicknameInput.value.trim();
+    if (!nick) {
+      alert('لطفاً نام کاربری خود را وارد کنید.');
+      return;
+    }
+    sessionNickname = nick;
+    localStorage.setItem('webNickname', nick);
+    
+    approvalNameSection.style.display = 'none';
+    approvalLoader.style.display = 'flex';
+    approvalStatusText.textContent = 'درخواست اتصال ارسال شد. منتظر تایید مدیر شبکه باشید...';
+    
+    startApprovalPolling();
+  });
+
+  async function startApprovalPolling() {
+    if (approvalInterval) clearInterval(approvalInterval);
+    checkApprovalStatus();
+    approvalInterval = setInterval(checkApprovalStatus, 2000);
+  }
+
+  async function checkApprovalStatus() {
+    try {
+      const url = `/api/web/session_status?sessionId=${webSessionId}&nickname=${encodeURIComponent(sessionNickname)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      
+      if (data.status === 'approved') {
+        clearInterval(approvalInterval);
+        approvalOverlay.classList.add('hidden');
+        
+        const nickInput = document.getElementById('nicknameInput');
+        if (nickInput) nickInput.value = sessionNickname;
+        
+        loadNetworkLinks();
+        loadFiles();
+        loadMessages();
+        startChatPolling();
+      } else if (data.status === 'denied') {
+        clearInterval(approvalInterval);
+        approvalLoader.style.display = 'none';
+        approvalNameSection.style.display = 'block';
+        approvalStatusText.textContent = 'درخواست اتصال شما توسط مدیر شبکه رد شد. می‌توانید دوباره تلاش کنید:';
+      }
+    } catch (err) {
+      approvalStatusText.textContent = 'خطا در ارتباط با سرور. در حال تلاش مجدد...';
+    }
+  }
+
+  if (sessionNickname) {
+    approvalNameSection.style.display = 'none';
+    approvalLoader.style.display = 'flex';
+    approvalStatusText.textContent = 'در حال ارسال درخواست اتصال به مدیر شبکه...';
+    startApprovalPolling();
+  }
+
+  // ===== CHAT / MESSAGING FUNCTIONALITY =====
+  const chatInput = document.getElementById('chatInput');
+  const sendChatBtn = document.getElementById('sendChatBtn');
+  const chatMessageList = document.getElementById('chatMessageList');
+  const downloadChatBtn = document.getElementById('downloadChatBtn');
+  const nicknameInput = document.getElementById('nicknameInput');
+  
+  const replyPreview = document.getElementById('replyPreview');
+  const replyPreviewUser = document.getElementById('replyPreviewUser');
+  const replyPreviewText = document.getElementById('replyPreviewText');
+  const replyPreviewCancel = document.getElementById('replyPreviewCancel');
+
+  let activeReplyTo = null;
+
+  function setReplyTo(id, user, text) {
+    activeReplyTo = { id, user, text };
+    replyPreviewUser.textContent = `پاسخ به ${user}`;
+    replyPreviewText.textContent = text;
+    replyPreview.style.display = 'flex';
+    chatInput.focus();
+  }
+
+  function clearReplyTo() {
+    activeReplyTo = null;
+    replyPreview.style.display = 'none';
+  }
+
+  replyPreviewCancel.addEventListener('click', clearReplyTo);
+
+  async function loadMessages() {
+    try {
+      const res = await fetch('/api/messages', {
+        headers: { 'X-Web-Session-Id': webSessionId }
+      });
+      if (!res.ok) return;
+      const messages = await res.json();
+      
+      if (!messages.length) {
+        chatMessageList.innerHTML = '<div class="es"><span class="esi">💬</span>هنوز پیامی وجود ندارد. گفتگو را آغاز کنید!</div>';
+        return;
+      }
+      
+      chatMessageList.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (const msg of messages) {
+        const row = document.createElement('div');
+        row.className = 'msgRow';
+        
+        const safeFrom = escapeHtml(msg.from || 'کاربر ناشناس');
+        const safeText = escapeHtml(msg.text || '');
+        const timeStr = fmtDate(msg.created);
+        const editedLabel = msg.edited ? ' <span style="font-size:10px; color:var(--text3);">(ویرایش شده)</span>' : '';
+        
+        let replyHtml = '';
+        if (msg.replyToId) {
+          replyHtml = `
+            <div class="msgReplyBox">
+              <div class="msgReplyUser">↪ پاسخ به ${escapeHtml(msg.replyToUser || 'ناشناس')}</div>
+              <div class="msgReplyText">${escapeHtml(msg.replyToText || '')}</div>
+            </div>
+          `;
+        }
+        
+        row.innerHTML = `
+          <div class="msgBody" style="width: 100%;">
+            <div class="msgMeta">
+              <span class="msgFrom">${safeFrom}${editedLabel}</span>
+              <span>🕐 ${timeStr}</span>
+            </div>
+            ${replyHtml}
+            <div class="msgText">${safeText}</div>
+            <div class="msgBtns" style="margin-top: 6px;">
+              <button class="btn bd" style="padding: 4px 10px; min-height: 28px; font-size: 11px; margin-left: 4px;" type="button" data-reply-id="${msg.id}" data-reply-user="${safeFrom}" data-reply-text="${safeText}">پاسخ</button>
+              <button class="btn bd" style="padding: 4px 10px; min-height: 28px; font-size: 11px; margin-left: 4px;" type="button" data-edit-id="${msg.id}" data-edit-text="${safeText}" data-edit-user="${safeFrom}">ویرایش</button>
+              <button class="btn bd" style="padding: 4px 10px; min-height: 28px; font-size: 11px; margin-left: 4px;" type="button" data-copy-text="${encodeURIComponent(msg.text)}">کپی</button>
+              <button class="btn bd br" style="padding: 4px 10px; min-height: 28px; font-size: 11px;" type="button" data-delete-msg="${msg.id}">حذف</button>
+            </div>
+          </div>
+        `;
+        frag.appendChild(row);
+      }
+      chatMessageList.appendChild(frag);
+    } catch (err) {
+      chatMessageList.innerHTML = '<div class="es"><span class="esi">⚠</span>خطا در بارگذاری پیام‌ها.</div>';
+    }
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  async function sendMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    
+    const nick = nicknameInput.value.trim() || sessionNickname || 'کاربر وب';
+    sendChatBtn.disabled = true;
+    
+    try {
+      const payload = {
+        from: nick,
+        text: text
+      };
+      if (activeReplyTo) {
+        payload.replyToId = activeReplyTo.id;
+        payload.replyToText = activeReplyTo.text;
+        payload.replyToUser = activeReplyTo.user;
+      }
+
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Web-Session-Id': webSessionId
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error();
+      chatInput.value = '';
+      clearReplyTo();
+      await loadMessages();
+    } catch {
+      alert('خطا در ارسال پیام.');
+    } finally {
+      sendChatBtn.disabled = false;
+    }
+  }
+
+  sendChatBtn.addEventListener('click', sendMessage);
+  chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  downloadChatBtn.addEventListener('click', () => {
+    window.location.href = `/api/messages/download?sessionId=${webSessionId}`;
+  });
+
+  chatMessageList.addEventListener('click', async e => {
+    const copyBtn = e.target.closest('[data-copy-text]');
+    if (copyBtn) {
+      const text = decodeURIComponent(copyBtn.dataset.copyText);
+      await copyText(text);
+      copyBtn.textContent = '✓ کپی شد';
+      setTimeout(() => copyBtn.textContent = 'کپی', 1400);
+      return;
+    }
+
+    const replyBtn = e.target.closest('[data-reply-id]');
+    if (replyBtn) {
+      const id = replyBtn.dataset.replyId;
+      const user = replyBtn.dataset.replyUser;
+      const text = replyBtn.dataset.replyText;
+      setReplyTo(id, user, text);
+      return;
+    }
+
+    const editBtn = e.target.closest('[data-edit-id]');
+    if (editBtn) {
+      const id = editBtn.dataset.editId;
+      const user = editBtn.dataset.editUser;
+      const text = editBtn.dataset.editText;
+      const newText = prompt('ویرایش پیام:', text);
+      if (newText !== null && newText.trim() !== '') {
+        try {
+          const res = await fetch(`/api/messages/${id}?sessionId=${webSessionId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json; charset=UTF-8'
+            },
+            body: JSON.stringify({
+              from: user,
+              text: newText.trim()
+            })
+          });
+          if (!res.ok) throw new Error();
+          await loadMessages();
+        } catch {
+          alert('ویرایش پیام با خطا مواجه شد.');
+        }
+      }
+      return;
+    }
+
+    const delBtn = e.target.closest('[data-delete-msg]');
+    if (delBtn) {
+      const msgId = delBtn.dataset.deleteMsg;
+      if (!confirm('آیا مایل به حذف این پیام هستید؟')) return;
+      delBtn.disabled = true;
+      try {
+        const res = await fetch(`/api/messages/${msgId}?sessionId=${webSessionId}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) throw new Error();
+        await loadMessages();
+      } catch {
+        alert('حذف پیام با خطا مواجه شد.');
+        delBtn.disabled = false;
+      }
+    }
+  });
+
+  function startChatPolling() {
+    if (chatInterval) clearInterval(chatInterval);
+    chatInterval = setInterval(loadMessages, 1500);
+  }
+
+  // Init loops if we didn't require approval overlay (e.g. localhost)
+  // Otherwise the polling function will init them once approved.
+  if (!sessionNickname) {
+    // Show normal screen contents or prompt first
+  } else {
+    setInterval(loadNetworkLinks, 10000);
+    setInterval(loadFiles, 10000);
+  }
+</script>
+</body>
+</html>
