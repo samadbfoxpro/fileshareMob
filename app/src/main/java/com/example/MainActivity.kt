@@ -30,6 +30,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.BorderStroke
@@ -142,6 +144,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 
 class MainActivity : ComponentActivity() {
 
@@ -256,6 +259,7 @@ fun MainScreenLayout(
                 when (activeTab) {
                     "dashboard" -> FileShareDashboard(
                         repository = repository,
+                        onNavigateToTab = { activeTab = it },
                         modifier = Modifier.fillMaxSize()
                     )
                     "chat" -> FileShareMessages(
@@ -359,23 +363,24 @@ fun MainScreenLayout(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppHeader(onGuideClick: () -> Unit) {
+    val isRunning by FileShareService.isRunning.collectAsState()
+
     TopAppBar(
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text(
-                        text = "FileShare",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "انتقال فایل در شبکه محلی وای‌فای",
-                        fontSize = 10.sp,
-                        color = Color(0xFF8696A0),
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+            Column {
+                Text(
+                    text = "FileShare",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(1.dp))
+                Text(
+                    text = if (isRunning) "آماده انتقال فایل • سرور فعال" else "Ready to transfer • آماده انتقال",
+                    fontSize = 10.sp,
+                    color = if (isRunning) Color(0xFF25D366) else Color(0xFF8696A0),
+                    fontWeight = FontWeight.Medium
+                )
             }
         },
         actions = {
@@ -384,12 +389,13 @@ fun AppHeader(onGuideClick: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(end = 12.dp)
             ) {
-                // Guide/Info Button
+                // Info button
                 IconButton(
                     onClick = onGuideClick,
                     modifier = Modifier
-                        .size(36.dp)
-                        .background(Color(0xFF121B22), shape = RoundedCornerShape(10.dp))
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF121B22))
                         .border(BorderStroke(1.dp, Color(0xFF2A3942)), RoundedCornerShape(10.dp))
                         .testTag("guide_button")
                 ) {
@@ -397,20 +403,22 @@ fun AppHeader(onGuideClick: () -> Unit) {
                         imageVector = Icons.Default.Info,
                         contentDescription = "راهنما و قوانین",
                         tint = Color(0xFF00A884),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
 
+                // Minimal Version badge
                 Box(
                     modifier = Modifier
-                        .background(Color(0xFF121B22), shape = RoundedCornerShape(12.dp))
-                        .border(BorderStroke(1.dp, Color(0xFF2A3942)), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF121B22))
+                        .border(BorderStroke(1.dp, Color(0xFF2A3942)), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
                     Text(
-                        text = "v1.0.0",
-                        fontSize = 11.sp,
-                        color = Color(0xFF00A884),
+                        text = "v1.0",
+                        fontSize = 10.sp,
+                        color = Color(0xFF8696A0),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -419,7 +427,10 @@ fun AppHeader(onGuideClick: () -> Unit) {
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color(0xFF1F2C34)
         ),
-        modifier = Modifier.fillMaxWidth().testTag("app_bar")
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(BorderStroke(0.5.dp, Color(0xFF2A3942).copy(alpha = 0.5f)))
+            .testTag("app_bar")
     )
 }
 
@@ -428,69 +439,156 @@ fun AppBottomNavigation(
     activeTab: String,
     onTabSelected: (String) -> Unit
 ) {
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp)
-            .background(Color(0xFF202C33))
-            .border(BorderStroke(1.dp, Color(0xFF2A3942)))
-            .navigationBarsPadding(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceAround
+            .navigationBarsPadding()
+            .padding(start = 18.dp, end = 18.dp, bottom = 12.dp, top = 4.dp),
+        contentAlignment = Alignment.Center
     ) {
-        BottomTabItem(
-            isActive = activeTab == "dashboard",
-            icon = Icons.Default.Home,
-            onClick = { onTabSelected("dashboard") }
-        )
+        // Floating pill-shaped navigation dock (occupies ~88% of screen width)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .height(64.dp)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(26.dp),
+                    ambientColor = Color(0x40000000),
+                    spotColor = Color(0x40000000)
+                )
+                .clip(RoundedCornerShape(26.dp))
+                .background(Color(0xFF1F2C34))
+                .border(BorderStroke(1.dp, Color(0xFF2B3A44)), RoundedCornerShape(26.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            // LTR ensures: Left = Share (logs), Center = Transfer / Send (chat), Right = Home (dashboard)
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. Left: Share (فایل‌های اشتراک‌گذاری شده)
+                    DockSideTabItem(
+                        isActive = activeTab == "logs",
+                        icon = Icons.Default.Share,
+                        contentDescription = "اشتراک‌گذاری",
+                        onClick = { onTabSelected("logs") }
+                    )
 
-        BottomTabItem(
-            isActive = activeTab == "chat",
-            icon = Icons.Default.Send,
-            onClick = { onTabSelected("chat") }
-        )
+                    // 2. Middle: Transfer / Send (اکشن اصلی - چت و تبادل)
+                    DockCenterActionItem(
+                        isActive = activeTab == "chat",
+                        icon = Icons.Default.Send,
+                        contentDescription = "ارسال و انتقال",
+                        onClick = { onTabSelected("chat") }
+                    )
 
-        BottomTabItem(
-            isActive = activeTab == "logs",
-            icon = Icons.Default.Share, 
-            onClick = { onTabSelected("logs") }
+                    // 3. Right: Home (صفحه اصلی)
+                    DockSideTabItem(
+                        isActive = activeTab == "dashboard",
+                        icon = Icons.Default.Home,
+                        contentDescription = "خانه",
+                        onClick = { onTabSelected("dashboard") }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DockSideTabItem(
+    isActive: Boolean,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    val iconColor by animateColorAsState(
+        targetValue = if (isActive) Color(0xFF00A884) else Color(0xFF8696A0),
+        animationSpec = tween(durationMillis = 250),
+        label = "dock_side_icon_color"
+    )
+    val containerBg by animateColorAsState(
+        targetValue = if (isActive) Color(0xFF00A884).copy(alpha = 0.14f) else Color.Transparent,
+        animationSpec = tween(durationMillis = 250),
+        label = "dock_side_bg"
+    )
+    val borderStroke = if (isActive) BorderStroke(1.dp, Color(0xFF00A884).copy(alpha = 0.35f)) else null
+
+    Box(
+        modifier = Modifier
+            .width(58.dp)
+            .height(44.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(containerBg)
+            .then(if (borderStroke != null) Modifier.border(borderStroke, RoundedCornerShape(16.dp)) else Modifier)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconColor,
+            modifier = Modifier.size(24.dp)
         )
     }
 }
 
 @Composable
-fun BottomTabItem(
+fun DockCenterActionItem(
     isActive: Boolean,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
     onClick: () -> Unit
 ) {
+    val iconColor by animateColorAsState(
+        targetValue = if (isActive) Color.White else Color(0xFF8696A0),
+        animationSpec = tween(durationMillis = 250),
+        label = "dock_center_icon_color"
+    )
+    val buttonBg by animateColorAsState(
+        targetValue = if (isActive) Color(0xFF00A884) else Color(0xFF162229),
+        animationSpec = tween(durationMillis = 250),
+        label = "dock_center_bg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isActive) Color(0xFF25D366).copy(alpha = 0.6f) else Color(0xFF2B3A44),
+        animationSpec = tween(durationMillis = 250),
+        label = "dock_center_border"
+    )
+
     Box(
         modifier = Modifier
-            .size(68.dp)
-            .clip(RoundedCornerShape(20.dp))
+            .size(52.dp)
+            .shadow(
+                elevation = if (isActive) 4.dp else 1.dp,
+                shape = RoundedCornerShape(18.dp),
+                ambientColor = Color(0x33000000),
+                spotColor = Color(0x33000000)
+            )
+            .clip(RoundedCornerShape(18.dp))
+            .background(buttonBg)
+            .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(18.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (isActive) Color(0xFF00A884).copy(alpha = 0.15f) else Color.Transparent),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isActive) Color(0xFF00A884) else Color(0xFF8696A0),
-                modifier = Modifier.size(28.dp)
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = iconColor,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }
 
 @Composable
 fun FileShareDashboard(
     repository: FileShareRepository,
+    onNavigateToTab: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -500,8 +598,13 @@ fun FileShareDashboard(
 
     var sharedFolderUri by remember { mutableStateOf(repository.getSharedFolderUri()) }
     var sharedFolderName by remember { mutableStateOf(repository.getSharedFolderName() ?: "") }
+    var isHelpExpanded by remember { mutableStateOf(false) }
+    var showQrDialog by remember { mutableStateOf(false) }
 
-    // Launcher for selecting shared folder (SAF document tree)
+    val primaryIp = serverAddresses.firstOrNull() ?: "192.168.1.100"
+    val primaryUrl = if (serverAddresses.isNotEmpty()) "http://${primaryIp}:8886" else "http://localhost:8886"
+
+    // SAF Document Tree launcher for selecting folder
     val sharedFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -513,10 +616,9 @@ fun FileShareDashboard(
                 } catch (se: SecurityException) {
                     context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                
                 repository.setSharedFolderUri(uri.toString())
                 sharedFolderUri = uri.toString()
-                sharedFolderName = repository.getSharedFolderName() ?: "سرور محلی"
+                sharedFolderName = repository.getSharedFolderName() ?: "پوشه اشتراکی"
                 Toast.makeText(context, "پوشه اشتراکی با موفقیت تنظیم شد", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -527,13 +629,8 @@ fun FileShareDashboard(
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            FileShareService.startService(context)
-        } else {
-            Toast.makeText(context, "برای کارکرد سرور در پس‌زمینه، دسترسی به نوتیفیکیشن لازم است.", Toast.LENGTH_LONG).show()
-            FileShareService.startService(context)
-        }
+    ) {
+        FileShareService.startService(context)
     }
 
     val onToggleServer = {
@@ -556,196 +653,256 @@ fun FileShareDashboard(
         }
     }
 
-    // Status mapping based on designer instruction
-    val statusColor by animateColorAsState(
-        targetValue = if (isRunning) Color(0xFFB2F2BB) else Color(0xFFF87171),
-        animationSpec = tween(durationMillis = 300),
-        label = "status_color"
-    )
+    if (showQrDialog) {
+        QRCodeDisplayDialog(
+            url = primaryUrl,
+            onDismiss = { showQrDialog = false }
+        )
+    }
 
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // App Intro Card matching minimal aesthetics
+        // -------------------------------------------------------------
+        // 1. HERO CARD: کارت اصلی «انتقال فایل» (File Transfer Hero)
+        // -------------------------------------------------------------
         Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(26.dp),
+                    ambientColor = Color(0x33000000),
+                    spotColor = Color(0x33000000)
+                ),
+            shape = RoundedCornerShape(26.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-            border = BorderStroke(1.dp, Color(0xFF2A3942))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "میزبانی انتقال فایل",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "بدون اینترنت، گوشی را تبدیل به سرور اشتراک‌گذاری محلی کنید.",
-                        fontSize = 11.sp,
-                        color = Color(0xFF8696A0),
-                        lineHeight = 15.sp
-                    )
-                }
-            }
-        }
-
-        // Server Status Card (Theme Specific)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-            border = BorderStroke(1.dp, Color(0xFF2A3942))
+            border = BorderStroke(1.dp, if (isRunning) Color(0xFF00A884).copy(alpha = 0.45f) else Color(0xFF2B3A44))
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Large Transfer Icon Container with subtle glow
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF00A884).copy(alpha = if (isRunning) 0.20f else 0.10f))
+                        .border(
+                            BorderStroke(1.dp, Color(0xFF00A884).copy(alpha = if (isRunning) 0.5f else 0.2f)),
+                            RoundedCornerShape(20.dp)
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
-                        Text(
-                            text = "وضعیت سرور محلی",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF00A884),
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(9.dp)
-                                    .background(statusColor, shape = CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (isRunning) "در حال اجرا" else "متوقف شده",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "File Transfer",
+                        tint = if (isRunning) Color(0xFF00A884) else Color(0xFF8696A0),
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
 
-                    // Android M3 Switch design container clickable
+                // Title & Description
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "انتقال و اشتراک‌گذاری فایل",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "اشتراک سریع و مستقیم فایل‌ها با سایر دستگاه‌ها در شبکه محلی بدون نیاز به اینترنت",
+                        fontSize = 12.sp,
+                        color = Color(0xFF8696A0),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 17.sp
+                    )
+                }
+
+                // Server Status Indicator inside Hero
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isRunning) Color(0xFF00A884).copy(alpha = 0.12f) else Color(0xFF2A3942).copy(alpha = 0.5f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
                     Box(
                         modifier = Modifier
-                            .width(52.dp)
-                            .height(32.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (isRunning) Color(0xFF00A884) else Color(0xFF2A3942))
-                            .clickable { onToggleServer() }
-                            .padding(4.dp),
-                        contentAlignment = if (isRunning) Alignment.CenterEnd else Alignment.CenterStart
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(if (isRunning) Color.White else Color(0xFF8696A0), shape = CircleShape)
-                        )
-                    }
-                }
-
-                if (isRunning) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "آدرس‌های اتصال در مرورگر سایر دستگاه‌ها:",
-                        fontSize = 11.sp,
-                        color = Color(0xFF8696A0),
-                        modifier = Modifier.padding(bottom = 6.dp)
+                            .background(if (isRunning) Color(0xFF25D366) else Color(0xFFF87171))
                     )
-
-                    // Address entries with clean monospace box
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AddressBox(url = "http://localhost:8886", label = "خود گوشی (لوکال)")
-                        for (ip in serverAddresses) {
-                            AddressBox(url = "http://$ip:8886", label = "سیستم‌های متصل به Wi-Fi")
-                        }
-                        if (serverAddresses.isEmpty()) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFF202C33), shape = RoundedCornerShape(12.dp))
-                                    .border(BorderStroke(1.dp, Color(0xFF2A3942)), RoundedCornerShape(12.dp))
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("⚠️", fontSize = 14.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "وای‌فای غیرفعال است! هات‌اسپات یا مودم را روشن کنید.",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFF87171)
-                                )
-                            }
-                        }
-                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isRunning) "سرور فعال و آماده دریافت/ارسال فایل" else "سرور متوقف است",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isRunning) Color(0xFF25D366) else Color(0xFF8696A0)
+                    )
                 }
 
-                // Port binding failures
-                AnimatedVisibility(
-                    visible = serverError != null,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    serverError?.let {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF3B1E1E), shape = RoundedCornerShape(8.dp))
-                                .border(BorderStroke(1.dp, Color(0xFFF87171)), RoundedCornerShape(8.dp))
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = it,
-                                color = Color(0xFFF87171),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                // Primary CTA Button
+                Button(
+                    onClick = {
+                        if (!isRunning) {
+                            onToggleServer()
+                        } else {
+                            onNavigateToTab("chat")
                         }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isRunning) Color(0xFF00A884) else Color(0xFF005C4B)
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isRunning) Icons.Default.Send else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isRunning) "شروع انتقال و باز کردن چت" else "روشن کردن سرور و شروع انتقال",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
             }
         }
 
-        // Configuration grid (2 columns)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        // -------------------------------------------------------------
+        // 2. STATUS CAPSULE: کپسول وضعیت سرور
+        // -------------------------------------------------------------
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFF1F2C34))
+                .border(BorderStroke(1.dp, Color(0xFF2B3A44)), RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // Left Box: Port Info
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-                border = BorderStroke(1.dp, Color(0xFF2A3942))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (isRunning) Color(0xFF25D366) else Color(0xFF8696A0))
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (isRunning) "سرور فعال (Active)" else "سرور غیرفعال (Inactive)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isRunning) Color(0xFF25D366) else Color(0xFF8696A0)
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isRunning) "$primaryIp : 8886" else "جهت انتقال، سرور را روشن کنید",
+                            fontSize = 11.sp,
+                            color = if (isRunning) Color(0xFFECE5DD) else Color(0xFF8696A0),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Toggle Switch
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(28.dp)
+                        .clip(CircleShape)
+                        .background(if (isRunning) Color(0xFF00A884) else Color(0xFF2A3942))
+                        .clickable { onToggleServer() }
+                        .padding(3.dp),
+                    contentAlignment = if (isRunning) Alignment.CenterEnd else Alignment.CenterStart
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(if (isRunning) Color.White else Color(0xFF8696A0))
+                    )
+                }
+            }
+        }
+
+        // Port binding error banner if any
+        AnimatedVisibility(
+            visible = serverError != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            serverError?.let {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF3B1E1E), shape = RoundedCornerShape(12.dp))
+                        .border(BorderStroke(1.dp, Color(0xFFF87171)), RoundedCornerShape(12.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = it,
+                        color = Color(0xFFF87171),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 3. COMPACT 2-PART CARD: کارت دو بخشی پورت و پوشه اشتراکی
+        // -------------------------------------------------------------
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
+            border = BorderStroke(1.dp, Color(0xFF2B3A44))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Section 1: Port
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .weight(1f)
+                        .padding(horizontal = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = "پورت فعال",
@@ -754,29 +911,29 @@ fun FileShareDashboard(
                         color = Color(0xFF8696A0)
                     )
                     Text(
-                        text = "۸۸۸۶",
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Light,
+                        text = "8886",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
-            }
 
-            // Right Box: Shared Folder Action Link
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp)
-                    .clickable { sharedFolderLauncher.launch(null) },
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-                border = BorderStroke(1.dp, Color(0xFF2A3942))
-            ) {
+                // Vertical Divider
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(44.dp)
+                        .background(Color(0xFF2B3A44))
+                )
+
+                // Section 2: Shared Folder
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .weight(1.3f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { sharedFolderLauncher.launch(null) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -792,7 +949,7 @@ fun FileShareDashboard(
                         if (sharedFolderUri != null) {
                             Box(
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(18.dp)
                                     .clip(CircleShape)
                                     .background(Color(0x33FF5252))
                                     .clickable {
@@ -806,20 +963,18 @@ fun FileShareDashboard(
                                 Text(
                                     text = "✕",
                                     color = Color(0xFFFF5252),
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                         }
                     }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = "📂",
-                            fontSize = 14.sp
-                        )
+                        Text("📁", fontSize = 14.sp)
                         Text(
                             text = if (sharedFolderUri != null) sharedFolderName else "انتخاب پوشه...",
                             color = Color(0xFF00A884),
@@ -833,117 +988,239 @@ fun FileShareDashboard(
             }
         }
 
-        // Quick Actions panel styled with divided borders
+        // -------------------------------------------------------------
+        // 4. ACTION CARD: باز کردن روی گوشی و وب
+        // -------------------------------------------------------------
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-            border = BorderStroke(1.dp, Color(0xFF2A3942))
+            border = BorderStroke(1.dp, Color(0xFF2B3A44))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🌐", fontSize = 16.sp)
+                        Text(
+                            text = "باز کردن روی گوشی و کامپیوتر",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "با اسکن QR یا وارد کردن آدرس زیر در مرورگر به فایل‌ها دسترسی پیدا کنید:",
+                        fontSize = 11.sp,
+                        color = Color(0xFF8696A0),
+                        lineHeight = 16.sp
+                    )
+                }
+
+                // Address & Action Buttons Row
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF121B22))
+                        .border(BorderStroke(1.dp, Color(0xFF2A3942)), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = primaryUrl,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF25D366),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(end = 8.dp)
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // QR Button
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF00A884).copy(alpha = 0.15f))
+                                    .border(BorderStroke(1.dp, Color(0xFF00A884).copy(alpha = 0.35f)), RoundedCornerShape(8.dp))
+                                    .clickable { showQrDialog = true }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "QR",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00A884)
+                                )
+                            }
+
+                            // Copy Button
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF2A3942))
+                                    .clickable {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("FileShare Link", primaryUrl)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "آدرس کپی شد!", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "کپی",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+
+                            // Open in Browser Button
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF2A3942))
+                                    .clickable {
+                                        try {
+                                            val openIntent = Intent(Intent.ACTION_VIEW, Uri.parse(primaryUrl))
+                                            context.startActivity(openIntent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "مرورگری برای باز کردن پیدا نشد", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "↗ باز کردن",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF8696A0)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 5. COLLAPSIBLE GUIDE SECTION: بخش راهنمای جمع‌شونده
+        // -------------------------------------------------------------
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
+            border = BorderStroke(1.dp, Color(0xFF2B3A44))
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // Action 1: Open panel
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            val openIntent = Intent(Intent.ACTION_VIEW, Uri.parse("http://localhost:8886"))
-                            context.startActivity(openIntent)
-                        }
-                        .padding(16.dp),
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { isHelpExpanded = !isHelpExpanded }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFF005C4B), shape = CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("🌐", fontSize = 16.sp)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = Color(0xFF00A884),
+                            modifier = Modifier.size(20.dp)
+                        )
                         Text(
-                            text = "باز کردن پنل وب روی گوشی",
+                            text = "نحوه اتصال به فایل‌ها",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
-                    Text("◀", fontSize = 10.sp, color = Color(0xFF8696A0))
+                    Text(
+                        text = if (isHelpExpanded) "▲" else "▼",
+                        fontSize = 11.sp,
+                        color = Color(0xFF8696A0)
+                    )
                 }
 
-                // Divider Box
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(Color(0xFF2A3942))
-                )
-
-                // Action 2: Show Upload folder path info (Non-clickable representation)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                AnimatedVisibility(
+                    visible = isHelpExpanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .size(36.dp)
-                            .background(Color(0xFF2A3942), shape = CircleShape),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("📂", fontSize = 16.sp)
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "مسیر پیش‌فرض ذخیره فایل‌های آپلود شده",
-                            fontSize = 13.sp,
-                            fontWeight = Modifier.let { FontWeight.Medium },
-                            color = Color.White
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(Color(0xFF2A3942))
                         )
-                        Text(
-                            text = repository.getUploadsDirectoryPath(),
-                            fontSize = 9.sp,
-                            color = Color(0xFF8696A0),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        GuideStepItem(number = "۱", text = "گوشی و دستگاه دوم (کامپیوتر، تبلت یا گوشی دیگر) را به یک شبکه وای‌فای یا هات‌اسپات متصل کنید.")
+                        GuideStepItem(number = "۲", text = "سرور را در این برنامه روشن کرده و آدرس نمایش داده شده را در مرورگر دستگاه دوم باز کنید.")
+                        GuideStepItem(number = "۳", text = "بدون نیاز به اینترنت و با حداکثر سرعت شبکه محلی، فایل‌ها را با امنیت کامل مبادله کنید.")
                     }
                 }
             }
         }
 
-        // About card helper
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2C34)),
-            border = BorderStroke(1.dp, Color(0xFF2A3942))
+        // Space at bottom so content is never covered by floating dock
+        Spacer(modifier = Modifier.height(72.dp))
+    }
+}
+
+@Composable
+fun GuideStepItem(number: String, text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF00A884).copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = Color(0xFF00A884),
-                    modifier = Modifier
-                        .size(18.dp)
-                        .padding(top = 2.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "برنامه FileShare کاملاً بومی و مستقل در شبکه محلی کار می‌کند. با روشن کردن سرور، این گوشی تبدیل به وب سرور انتقال سریع و گفتگوی بی واسطه در شبکه خانگی یا کاری شما می‌شود.",
-                    fontSize = 11.sp,
-                    color = Color(0xFF8696A0),
-                    lineHeight = 16.sp
-                )
-            }
+            Text(
+                text = number,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF00A884)
+            )
         }
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            color = Color(0xFFECE5DD),
+            lineHeight = 17.sp,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -962,7 +1239,7 @@ fun QRCodeDisplayDialog(
             Text(
                 text = "اسکن آدرس اتصال",
                 color = Color.White,
-                fontSize = 15.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -975,10 +1252,11 @@ fun QRCodeDisplayDialog(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "با اسکن این کد در گوشی دوم، به راحتی به این سرور متصل شوید.",
-                    color = Color(0xFF938F99),
+                    text = "با دوربین گوشی یا تبلت دوم این بارکد را اسکن کنید تا مستقیماً به پنل وب متصل شوید:",
+                    color = Color(0xFF8696A0),
                     fontSize = 11.sp,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    lineHeight = 16.sp
                 )
                 if (bitmap != null) {
                     androidx.compose.foundation.Image(
@@ -986,110 +1264,34 @@ fun QRCodeDisplayDialog(
                         contentDescription = "کد QR آدرس",
                         modifier = Modifier
                             .size(220.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(12.dp))
                             .background(Color.White)
-                            .padding(8.dp)
+                            .padding(10.dp)
                     )
                 } else {
-                    Text("خطا در ساخت QR Code", color = Color.Red, fontSize = 12.sp)
+                    Text("خطا در ساخت QR Code", color = Color(0xFFF87171), fontSize = 12.sp)
                 }
                 Text(
                     text = url,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFD0BCFF),
+                    color = Color(0xFF25D366),
                     textAlign = TextAlign.Center
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("تایید", color = Color(0xFFD0BCFF))
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00A884))
+            ) {
+                Text("بستن", color = Color.White, fontWeight = FontWeight.Bold)
             }
         },
-        containerColor = Color(0xFF2B2930)
+        containerColor = Color(0xFF1F2C34),
+        shape = RoundedCornerShape(24.dp)
     )
 }
-
-@Composable
-fun AddressBox(
-    url: String,
-    label: String
-) {
-    val context = LocalContext.current
-    var showQR by remember { mutableStateOf(false) }
-
-    if (showQR) {
-        QRCodeDisplayDialog(url = url, onDismiss = { showQR = false })
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF1C1B1F))
-            .border(BorderStroke(1.dp, Color(0xFF49454F)), RoundedCornerShape(14.dp))
-            .clickable {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("FileShare Link", url)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(context, "$label کپی شد!", Toast.LENGTH_SHORT).show()
-            }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                color = Color(0xFFD0BCFF),
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = url,
-                fontSize = 12.sp,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "کپی آدرَس",
-                fontSize = 9.sp,
-                color = Color(0xFFD0BCFF),
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
-                    .clickable {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("FileShare Link", url)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "$label کپی شد!", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-            IconButton(
-                onClick = { showQR = true },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Share,
-                    contentDescription = "QR Code",
-                    tint = Color(0xFFD0BCFF),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
-
 
 // ---------------------- TAB 2: MESSAGES (LOCAL CHAT) ----------------------
 fun formatToLocalTime(isoString: String): String {
